@@ -1,8 +1,16 @@
--- Content Factory — schéma walking skeleton
--- Tables : communications (faits durs) + posts (4 posts générés par com)
--- Note : pas d'auth au skeleton → RLS désactivée (défaut). Fermé avec l'auth (Epic 1).
+-- Content Factory — schéma complet (source de vérité)
+-- Tables : workspaces + communications (faits durs) + posts (4 posts/com)
+-- Auth : Supabase Auth (magic link). RLS activée, policies owner-scoped via auth.uid().
 
 create extension if not exists pgcrypto;
+
+-- Workspaces (owner unique au slice : pas encore multi-membres)
+create table if not exists workspaces (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists communications (
   id uuid primary key default gen_random_uuid(),
@@ -11,6 +19,7 @@ create table if not exists communications (
   event_location text,
   event_link text,
   intervenants_text text,
+  workspace_id uuid references workspaces(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -24,4 +33,37 @@ create table if not exists posts (
   created_at timestamptz not null default now()
 );
 
+create index if not exists workspaces_owner_id_idx on workspaces(owner_id);
+create index if not exists communications_workspace_id_idx on communications(workspace_id);
 create index if not exists posts_communication_id_idx on posts(communication_id);
+
+-- RLS : chaque utilisateur ne voit que les données de ses workspaces.
+alter table workspaces enable row level security;
+alter table communications enable row level security;
+alter table posts enable row level security;
+
+drop policy if exists workspaces_owner_all on workspaces;
+create policy workspaces_owner_all on workspaces
+  for all
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists communications_owner_all on communications;
+create policy communications_owner_all on communications
+  for all
+  using (workspace_id in (select id from workspaces where owner_id = auth.uid()))
+  with check (workspace_id in (select id from workspaces where owner_id = auth.uid()));
+
+drop policy if exists posts_owner_all on posts;
+create policy posts_owner_all on posts
+  for all
+  using (communication_id in (
+    select c.id from communications c
+    join workspaces w on w.id = c.workspace_id
+    where w.owner_id = auth.uid()
+  ))
+  with check (communication_id in (
+    select c.id from communications c
+    join workspaces w on w.id = c.workspace_id
+    where w.owner_id = auth.uid()
+  ));

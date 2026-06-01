@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { addDays, format, isValid, parseISO } from "date-fns";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
+import { getOrCreateTdsWorkspace } from "@/lib/workspace";
 import { generatePosts, type EventFacts } from "@/lib/llm";
 
 // La génération DeepSeek (4 posts) peut être longue : on relève la limite.
@@ -19,6 +20,14 @@ function asTrimmedString(value: unknown): string {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  }
+
   let body: GenerateBody;
   try {
     body = (await request.json()) as GenerateBody;
@@ -67,7 +76,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  // 2) Insertion de la communication
+  // 2) Workspace de l'utilisateur (créé si absent)
+  let workspaceId: string;
+  try {
+    const workspace = await getOrCreateTdsWorkspace(supabase, user.id);
+    workspaceId = workspace.id;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Workspace introuvable.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  // 3) Insertion de la communication (scopée workspace)
   const { data: comm, error: commError } = await supabase
     .from("communications")
     .insert({
@@ -76,6 +96,7 @@ export async function POST(request: Request) {
       event_location: eventLocation || null,
       event_link: eventLink || null,
       intervenants_text: intervenants || null,
+      workspace_id: workspaceId,
     })
     .select("id")
     .single();
@@ -89,7 +110,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // 3) Calcul des dates réelles + insertion des 4 posts
+  // 4) Calcul des dates réelles + insertion des 4 posts
   const eventDateObj = parseISO(eventDate);
   const rows = posts.map((post) => ({
     communication_id: comm.id as string,

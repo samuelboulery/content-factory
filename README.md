@@ -13,7 +13,7 @@ contextuelle et badge de conformité automatique.
 
 - **Next.js 15** (App Router) + **React 19** + **TypeScript strict**
 - **Tailwind CSS v4** + **shadcn/ui**
-- **Supabase** (Postgres) — `@supabase/supabase-js`
+- **Supabase** (Postgres + Auth magic link) — `@supabase/supabase-js` + `@supabase/ssr`
 - **DeepSeek** (`deepseek-chat`) — appelé uniquement côté serveur
 - **date-fns** (locale `fr`)
 
@@ -47,14 +47,25 @@ cp .env.local.example .env.local
 
 ### Base de données
 
-Le schéma est dans `supabase-schema.sql` (tables `communications` + `posts`).
+Le schéma est dans `supabase-schema.sql` (tables `workspaces`, `communications`, `posts`).
 Il a déjà été appliqué sur le projet Supabase via MCP. Pour le rejouer sur un autre
 projet : coller le contenu de `supabase-schema.sql` dans le SQL Editor du dashboard
 Supabase, ou via la CLI Supabase.
 
-> **Sécurité (walking skeleton)** : RLS est **désactivée** sur les 2 tables (pas d'auth
-> au MVP). Avec la clé publishable, n'importe qui peut lire/écrire ces tables. Trou
-> volontaire et documenté, à fermer avec l'auth (RLS + policies par workspace).
+> **Sécurité** : RLS est **activée** sur les 3 tables, avec des policies owner-scoped
+> (`auth.uid()`). Chaque utilisateur ne voit que les données de ses workspaces.
+
+### Authentification
+
+Connexion par **magic link** (Supabase Auth). Au 1er login, un workspace
+« The Design Society » est créé pour l'utilisateur. Tout est protégé par un middleware
+(redirection vers `/login` si non connecté).
+
+**Config Supabase requise** (dashboard → Authentication → URL Configuration) :
+- **Site URL** : `http://localhost:3000` (en dev)
+- **Redirect URLs** : ajouter `http://localhost:3000/**`
+
+Sans cette config, le lien magique ne pourra pas rediriger vers l'app.
 
 ## Lancer en dev
 
@@ -74,8 +85,9 @@ npm run build       # build production
 
 ## Test end-to-end
 
-1. `npm run dev`, ouvrir http://localhost:3000
-2. Cliquer **Nouvelle communication**
+1. `npm run dev`, ouvrir http://localhost:3000 → redirection vers `/login`
+2. Saisir un e-mail → recevoir le lien magique → cliquer → retour sur l'accueil connecté
+3. Cliquer **Nouvelle communication**
 3. Remplir un événement (nom + date requis ; lieu / lien / intervenants optionnels)
 4. **Générer 4 posts** → redirection vers `/communications/[id]`
 5. Vérifier les 4 cartes : contenu FR cohérent (J-30 save-the-date → J-1 rappel),

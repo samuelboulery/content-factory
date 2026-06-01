@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { supabase, type Communication, type Post } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
+import { type Communication, type Post } from "@/lib/types";
 import { checkCompliance } from "@/lib/compliance";
 import { PostCard } from "@/components/PostCard";
 
@@ -12,13 +13,14 @@ export default async function CommunicationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const supabase = await createClient();
 
+  // RLS scope automatiquement aux communications du workspace de l'utilisateur.
   const { data: commData } = await supabase
     .from("communications")
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  // Le client Supabase n'est pas typé via génériques DB → cast explicite assumé.
   const comm = (commData ?? null) as Communication | null;
   if (!comm) notFound();
 

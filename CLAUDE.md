@@ -62,7 +62,7 @@ Supabase : création projet, migrations et clés via MCP. Schéma = source de v�
 - **Ne jamais committer `.env.local`** ni aucune clé.
 - **Demander avant d'ajouter une dépendance** hors stack listée.
 - **Demander avant toute action destructive** (rm, reset --hard, DB reset).
-- Scope = walking skeleton : pas d'auth, pas de multi-workspace, pas d'édition/régénération, pas de visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
+- Scope actuel : auth (magic link) + 1 workspace TDS par owner. Pas encore de multi-workspace/switcher, ni settings, ni édition/régénération, ni visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
 
 ## Environment Variables
 
@@ -78,9 +78,11 @@ Supabase : création projet, migrations et clés via MCP. Schéma = source de v�
 
 Solo (Sam, owner). Développement **par paliers validés un à un**. Source de vérité produit : `content-factory-prd.md` et `content-factory-backlog.md`. Les agents reviewers / planner / tdd-guide sont disponibles via la config globale `~/.claude`.
 
-## Sécurité — note walking skeleton
+## Auth & sécurité
 
-Au skeleton (pas d'auth), **RLS désactivée** sur `communications` et `posts` : la clé publishable peut lire/écrire ces tables. Trou **volontaire et documenté**, fermé avec l'arrivée de l'auth (Epic 1 : RLS + policies par workspace).
+- **Auth = Supabase Auth (magic link)**. Clients SSR via `@supabase/ssr` : `src/lib/supabase/server.ts` (Server Components / routes), `client.ts` (navigateur), `middleware.ts` (refresh session + protège `/` et `/communications/*`, redirige vers `/login`).
+- **RLS activée** sur `workspaces`, `communications`, `posts` avec policies owner-scoped (`auth.uid()`). Chaque user ne voit que les données de ses workspaces. Le trou du skeleton est fermé.
+- Slice actuel : 1 workspace TDS unique par owner (créé au 1er login via `getOrCreateTdsWorkspace`). Pas encore de multi-workspace ni de switcher.
 
 ## graphify
 
