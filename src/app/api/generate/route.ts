@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { addDays, format, isValid, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { getOrCreateTdsWorkspace } from "@/lib/workspace";
+import { resolveActiveWorkspace } from "@/lib/workspace";
 import { generatePosts, type EventFacts } from "@/lib/llm";
 
 // La génération DeepSeek (4 posts) peut être longue : on relève la limite.
@@ -76,11 +76,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  // 2) Workspace de l'utilisateur (créé si absent)
+  // 2) Workspace actif de l'utilisateur (créé si absent)
   let workspaceId: string;
   try {
-    const workspace = await getOrCreateTdsWorkspace(supabase, user.id);
-    workspaceId = workspace.id;
+    const { active } = await resolveActiveWorkspace(supabase, user.id);
+    workspaceId = active.id;
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Workspace introuvable.";

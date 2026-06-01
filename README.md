@@ -61,6 +61,10 @@ Connexion par **magic link** (Supabase Auth). Au 1er login, un workspace
 « The Design Society » est créé pour l'utilisateur. Tout est protégé par un middleware
 (redirection vers `/login` si non connecté).
 
+**Multi-workspace** : barre latérale type Slack pour switcher entre workspaces et en
+créer de nouveaux (champ « Nouveau workspace »). Le workspace actif (cookie
+`cf_active_workspace`) scope les communications affichées et créées.
+
 **Config Supabase requise** (dashboard → Authentication → URL Configuration) :
 - **Site URL** : `http://localhost:3000` (en dev)
 - **Redirect URLs** : ajouter `http://localhost:3000/**`

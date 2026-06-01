@@ -1,36 +1,54 @@
+import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Workspace } from "./types";
 
-const TDS_WORKSPACE_NAME = "The Design Society";
+export const ACTIVE_WORKSPACE_COOKIE = "cf_active_workspace";
+const DEFAULT_WORKSPACE_NAME = "The Design Society";
 
-/**
- * Renvoie le workspace de l'utilisateur, le crée s'il n'existe pas.
- * Slice mince : un seul workspace TDS par owner (pas encore de multi-workspace).
- */
-export async function getOrCreateTdsWorkspace(
+export async function listWorkspaces(
   supabase: SupabaseClient,
   userId: string,
-): Promise<Workspace> {
-  const { data: existing } = await supabase
+): Promise<Workspace[]> {
+  const { data } = await supabase
     .from("workspaces")
     .select("*")
     .eq("owner_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
+  return (data ?? []) as Workspace[];
+}
 
-  if (existing) return existing as Workspace;
-
-  const { data: created, error } = await supabase
+export async function createWorkspace(
+  supabase: SupabaseClient,
+  userId: string,
+  name: string,
+): Promise<Workspace> {
+  const { data, error } = await supabase
     .from("workspaces")
-    .insert({ name: TDS_WORKSPACE_NAME, owner_id: userId })
+    .insert({ name, owner_id: userId })
     .select("*")
     .single();
-
-  if (error || !created) {
+  if (error || !data) {
     throw new Error(
       `Création du workspace échouée : ${error?.message ?? "inconnue"}`,
     );
   }
-  return created as Workspace;
+  return data as Workspace;
+}
+
+/**
+ * Résout le workspace actif (depuis le cookie) + liste tous les workspaces de l'owner.
+ * Crée le workspace TDS par défaut si l'utilisateur n'en a aucun.
+ */
+export async function resolveActiveWorkspace(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ active: Workspace; all: Workspace[] }> {
+  let all = await listWorkspaces(supabase, userId);
+  if (all.length === 0) {
+    all = [await createWorkspace(supabase, userId, DEFAULT_WORKSPACE_NAME)];
+  }
+  const cookieStore = await cookies();
+  const activeId = cookieStore.get(ACTIVE_WORKSPACE_COOKIE)?.value;
+  const active = all.find((w) => w.id === activeId) ?? all[0];
+  return { active, all };
 }
