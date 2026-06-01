@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { addDays, format, parseISO } from "date-fns";
+import { addDays, format, isValid, parseISO } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { generatePosts, type EventFacts } from "@/lib/llm";
 
@@ -43,9 +43,9 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !isValid(parseISO(eventDate))) {
     return NextResponse.json(
-      { error: "La date de l'événement est requise (format AAAA-MM-JJ)." },
+      { error: "La date de l'événement est invalide (format AAAA-MM-JJ attendu)." },
       { status: 400 },
     );
   }
@@ -103,6 +103,8 @@ export async function POST(request: Request) {
 
   const { error: postsError } = await supabase.from("posts").insert(rows);
   if (postsError) {
+    // Rollback : pas de communication orpheline si l'insertion des posts échoue.
+    await supabase.from("communications").delete().eq("id", comm.id as string);
     return NextResponse.json(
       { error: `Erreur base de données (posts) : ${postsError.message}` },
       { status: 500 },

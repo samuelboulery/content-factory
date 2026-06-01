@@ -33,15 +33,18 @@ export function PostCard({
   soWhat,
   compliance,
 }: PostCardProps) {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopyStatus("copied");
+      setTimeout(() => setCopyStatus("idle"), 2000);
     } catch {
-      setCopied(false);
+      setCopyStatus("error");
+      setTimeout(() => setCopyStatus("idle"), 2000);
     }
   }
 
@@ -79,7 +82,11 @@ export function PostCard({
       </CardContent>
       <CardFooter>
         <Button variant="outline" size="sm" onClick={handleCopy}>
-          {copied ? "Copié ✓" : "Copier"}
+          {copyStatus === "copied"
+            ? "Copié ✓"
+            : copyStatus === "error"
+              ? "Échec copie"
+              : "Copier"}
         </Button>
       </CardFooter>
     </Card>

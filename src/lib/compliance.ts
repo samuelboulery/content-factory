@@ -48,7 +48,7 @@ export function checkCompliance(content: string): ComplianceResult {
   const score = Math.round((passed / scoredChecks.length) * 100);
 
   // Info 1 — trou factuel assumé (pas une violation)
-  if (content.includes('[À COMPLÉTER')) infos.push('Trou factuel à compléter');
+  if (lower.includes('[à compléter')) infos.push('Trou factuel à compléter');
 
   // Info 2 — closing formula de la charte présente ?
   const hasClosing = CLOSING_FORMULAS.some((formula) => lower.includes(formula));

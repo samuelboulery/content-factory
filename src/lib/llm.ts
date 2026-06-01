@@ -112,7 +112,7 @@ export async function generatePosts(
         model: DEEPSEEK_MODEL,
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
-        temperature: 1.0,
+        temperature: 0.7,
       }),
     });
   } catch (err) {
