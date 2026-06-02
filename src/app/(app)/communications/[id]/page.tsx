@@ -97,15 +97,30 @@ export default async function CommunicationPage({
     if (d === 0) return "Jour J";
     return d < 0 ? `J${d}` : `J+${d}`;
   };
-  const timelineItems: TimelineItem[] = posts.map((post) => ({
-    id: post.id,
-    offsetLabel: offsetLabel(post.scheduled_date),
-    dateLabel: format(parseISO(post.scheduled_date), "d MMMM yyyy", {
-      locale: fr,
-    }),
-    status: post.status,
-    title: post.so_what ?? post.content.slice(0, 90),
-  }));
+  // Timeline = un point par date (les plateformes partagent les offsets → dédup).
+  const seenDates = new Set<string>();
+  const timelineItems: TimelineItem[] = posts
+    .filter((post) => {
+      if (seenDates.has(post.scheduled_date)) return false;
+      seenDates.add(post.scheduled_date);
+      return true;
+    })
+    .map((post) => ({
+      id: post.id,
+      offsetLabel: offsetLabel(post.scheduled_date),
+      dateLabel: format(parseISO(post.scheduled_date), "d MMMM yyyy", {
+        locale: fr,
+      }),
+      status: post.status,
+      title: post.so_what ?? post.content.slice(0, 90),
+    }));
+
+  // Posts groupés par plateforme (multi-plateforme).
+  const postsByNetwork = new Map<string, Post[]>();
+  for (const post of posts) {
+    if (!postsByNetwork.has(post.network)) postsByNetwork.set(post.network, []);
+    postsByNetwork.get(post.network)!.push(post);
+  }
 
   return (
     <main className="mx-auto max-w-3xl p-8">
@@ -118,7 +133,7 @@ export default async function CommunicationPage({
         <p className="text-muted-foreground">
           {eventDateLabel}
           {comm.event_location ? ` · ${comm.event_location}` : ""}
-          {` · ${comm.network}`}
+          {` · ${comm.networks.length > 0 ? comm.networks.join(" · ") : comm.network}`}
         </p>
         {total > 0 ? (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -316,33 +331,39 @@ export default async function CommunicationPage({
         </section>
       ) : null}
 
-      <div className="flex flex-col gap-4">
-        {posts.length === 0 ? (
-          <p className="text-muted-foreground">
-            Aucun post pour cette communication.
-          </p>
-        ) : (
-          posts.map((post) => (
-            <PostCard
-              key={post.id}
-              postId={post.id}
-              content={post.content}
-              dateLabel={format(parseISO(post.scheduled_date), "d MMMM yyyy", {
-                locale: fr,
-              })}
-              scheduledDate={post.scheduled_date}
-              soWhat={post.so_what}
-              compliance={checkCompliance(post.content)}
-              status={post.status}
-              edited={post.edited}
-              diverged={isDiverged(post)}
-              previousVersions={post.previous_versions ?? []}
-              aiReview={post.ai_review ?? null}
-              canWrite={canWrite}
-            />
-          ))
-        )}
-      </div>
+      {posts.length === 0 ? (
+        <p className="text-muted-foreground">
+          Aucun post pour cette communication.
+        </p>
+      ) : (
+        [...postsByNetwork.entries()].map(([network, networkPosts]) => (
+          <section key={network} className="mb-6">
+            <h2 className="mb-3 text-lg font-medium">{network}</h2>
+            <div className="flex flex-col gap-4">
+              {networkPosts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  postId={post.id}
+                  content={post.content}
+                  dateLabel={format(parseISO(post.scheduled_date), "d MMMM yyyy", {
+                    locale: fr,
+                  })}
+                  scheduledDate={post.scheduled_date}
+                  soWhat={post.so_what}
+                  compliance={checkCompliance(post.content)}
+                  status={post.status}
+                  edited={post.edited}
+                  diverged={isDiverged(post)}
+                  previousVersions={post.previous_versions ?? []}
+                  aiReview={post.ai_review ?? null}
+                  canWrite={canWrite}
+                  network={post.network}
+                />
+              ))}
+            </div>
+          </section>
+        ))
+      )}
     </main>
   );
 }

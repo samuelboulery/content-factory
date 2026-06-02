@@ -21,7 +21,8 @@ export type Communication = {
   event_link: string | null;
   intervenants_text: string | null;
   workspace_id: string | null;
-  network: string; // réseau cible de la génération (US-2.5)
+  network: string; // legacy : 1ʳᵉ plateforme (compat) ; voir `networks`
+  networks: string[]; // plateformes ciblées par la campagne (multi-plateforme)
   suggested_questions: string[]; // questions IA pour les intervenants (US-6.3)
   share_token: string;
   facts_updated_at: string;
@@ -81,6 +82,7 @@ export type Post = {
   previous_versions: PostRevision[];
   ai_review: PostReview | null;
   original_content: string | null; // brouillon IA figé (diff vs édition humaine, boucle d'apprentissage)
+  network: string; // plateforme du post (multi-plateforme)
   created_at: string;
 };
 

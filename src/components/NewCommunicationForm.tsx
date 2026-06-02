@@ -59,7 +59,7 @@ export function NewCommunicationForm({
       event_location: String(formData.get("event_location") ?? "").trim(),
       event_link: String(formData.get("event_link") ?? "").trim(),
       intervenants_text: String(formData.get("intervenants_text") ?? "").trim(),
-      network: String(formData.get("network") ?? networks[0]),
+      networks: formData.getAll("networks").map((v) => String(v)),
       template_id: String(formData.get("template_id") ?? templates[0]?.id ?? ""),
     };
 
@@ -120,19 +120,27 @@ export function NewCommunicationForm({
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label htmlFor="network">Réseau cible</Label>
-                <select
-                  id="network"
-                  name="network"
-                  defaultValue={networks[0]}
-                  className="h-9 rounded-md border bg-transparent px-3 text-sm"
-                >
+                <span className="text-sm font-medium">Plateformes cibles</span>
+                <div className="flex flex-wrap gap-4">
                   {networks.map((network) => (
-                    <option key={network} value={network}>
+                    <label
+                      key={network}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="networks"
+                        value={network}
+                        defaultChecked
+                        className="size-4"
+                      />
                       {network}
-                    </option>
+                    </label>
                   ))}
-                </select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Un set de posts est généré par plateforme cochée.
+                </p>
               </div>
 
               <div className="flex flex-col gap-2">

@@ -34,7 +34,8 @@ create table if not exists communications (
   event_link text,
   intervenants_text text,
   workspace_id uuid not null references workspaces(id) on delete cascade,
-  network text not null default 'LinkedIn', -- réseau cible de la génération (US-2.5)
+  network text not null default 'LinkedIn', -- legacy : 1ʳᵉ plateforme (compat)
+  networks text[] not null default '{}', -- plateformes ciblées par la campagne (multi-plateforme)
   suggested_questions text[] not null default '{}', -- questions IA pour les intervenants (US-6.3)
   facts_updated_at timestamptz not null default now(), -- bumpé à chaque édition des faits durs
   share_token uuid not null default gen_random_uuid(), -- lien public du form intervenants
@@ -53,6 +54,7 @@ create table if not exists posts (
   previous_versions jsonb not null default '[]'::jsonb, -- 3 dernières régénérations (US-5.10), plus récent en tête
   ai_review jsonb, -- verdict du relecteur IA de conformité (US-5.5, flag seul) ; null si non relu
   original_content text, -- brouillon IA figé (diff vs édition humaine, boucle d'apprentissage charte)
+  network text not null default 'LinkedIn', -- plateforme du post (multi-plateforme)
   created_at timestamptz not null default now()
 );
 
@@ -62,6 +64,7 @@ create index if not exists communications_workspace_id_idx on communications(wor
 create index if not exists posts_communication_id_idx on posts(communication_id);
 create index if not exists posts_communication_status_idx on posts(communication_id, status);
 create index if not exists posts_published_at_idx on posts(published_at);
+create index if not exists posts_network_idx on posts(network);
 
 -- ── Multi-user : membres + rôles (US-1.4) ────────────────────────────────────
 create table if not exists workspace_members (

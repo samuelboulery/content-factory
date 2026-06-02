@@ -48,10 +48,12 @@ export async function regeneratePostAction(formData: FormData) {
   const comm = commData as Communication | null;
   if (!comm) redirect("/");
 
+  // Contexte campagne = posts de la MÊME plateforme (multi-plateforme).
   const { data: siblingsData } = await supabase
     .from("posts")
     .select("*")
     .eq("communication_id", target.communication_id)
+    .eq("network", target.network)
     .order("scheduled_date", { ascending: true });
   const siblings = (siblingsData ?? []) as Post[];
 
@@ -66,12 +68,12 @@ export async function regeneratePostAction(formData: FormData) {
     .maybeSingle();
   const ws = wsData as Workspace | null;
   const context = ws ? buildWorkspaceContext(ws) : "";
-  // Régénération = même réseau que la com → applique l'overlay de charte (US-2.5).
+  // Régénération = plateforme du POST → applique l'overlay de charte (US-2.5 / multi-plateforme).
   const charter = ws
     ? mergeNetworkCharter(
         baseCharter,
-        getNetworkCharter(ws, comm.network),
-        comm.network,
+        getNetworkCharter(ws, target.network),
+        target.network,
       )
     : baseCharter;
 
