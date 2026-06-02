@@ -30,10 +30,14 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // IMPORTANT : ne rien exécuter entre createServerClient et getUser().
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // IMPORTANT : ne rien exécuter entre createServerClient et getClaims().
+  // getClaims = vérification LOCALE du JWT (signature ES256 via WebCrypto, JWKS en
+  // cache 10 min) + refresh auto de la session si proche de l'expiration (via
+  // getSession). Sécurisé (vérif cryptographique, pas un simple décodage de cookie)
+  // et sans aller-retour réseau vers le serveur Auth à chaque requête —
+  // contrairement à getUser. Refresh réseau seulement à l'expiration (~1×/h).
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const user = claimsData?.claims ?? null;
 
   const path = request.nextUrl.pathname;
   const isPublic =

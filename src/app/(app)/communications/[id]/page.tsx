@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/server";
+import { getSessionContext } from "@/lib/session";
 import {
   type Communication,
   type IntervenantSubmission,
@@ -14,7 +15,6 @@ import {
   addSubmissionToMatterAction,
   generateQuestionsAction,
 } from "@/lib/intervenant-actions";
-import { getWorkspaceRole } from "@/lib/members";
 import { PostCard } from "@/components/PostCard";
 import { SubmitButton } from "@/components/SubmitButton";
 import {
@@ -40,38 +40,39 @@ export default async function CommunicationPage({
 }) {
   const { id } = await params;
   const { regenError, qError, error } = await searchParams;
+  // Client direct + contexte de session lancé en parallèle (mémoïsé : déjà en vol
+  // depuis le layout). Les lectures ci-dessous ne dépendent que de `id` (pas du
+  // contexte membres) → on ne bloque pas dessus avant de les lancer.
   const supabase = await createClient();
+  const ctxPromise = getSessionContext();
 
-  // RLS scope automatiquement aux communications du workspace de l'utilisateur.
-  const { data: commData } = await supabase
-    .from("communications")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  // Les 3 lectures ne dépendent que de `id` → en parallèle (RLS scope au workspace).
+  const [{ data: commData }, { data: postsData }, { data: subData }] =
+    await Promise.all([
+      supabase.from("communications").select("*").eq("id", id).maybeSingle(),
+      supabase
+        .from("posts")
+        .select("*")
+        .eq("communication_id", id)
+        .order("scheduled_date", { ascending: true }),
+      supabase
+        .from("intervenant_submissions")
+        .select("*")
+        .eq("communication_id", id)
+        .order("created_at", { ascending: true }),
+    ]);
+
   const comm = (commData ?? null) as Communication | null;
   if (!comm) notFound();
 
-  // Rôle de l'utilisateur dans le workspace de la com → gating des écritures (US-1.5).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const role = user
-    ? await getWorkspaceRole(supabase, comm.workspace_id ?? "", user.id)
+  // Rôle dans le workspace de la com → gating des écritures (US-1.5).
+  const { roleByWs } = await ctxPromise;
+  const role = comm.workspace_id
+    ? (roleByWs.get(comm.workspace_id) ?? null)
     : null;
   const canWrite = role === "owner" || role === "editor";
 
-  const { data: postsData } = await supabase
-    .from("posts")
-    .select("*")
-    .eq("communication_id", id)
-    .order("scheduled_date", { ascending: true });
   const posts = (postsData ?? []) as Post[];
-
-  const { data: subData } = await supabase
-    .from("intervenant_submissions")
-    .select("*")
-    .eq("communication_id", id)
-    .order("created_at", { ascending: true });
   const submissions = (subData ?? []) as IntervenantSubmission[];
 
   const eventDateLabel = format(parseISO(comm.event_date), "d MMMM yyyy", {

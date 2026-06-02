@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { resolveActiveWorkspace } from "@/lib/workspace";
-import { getWorkspaceRole } from "@/lib/members";
+import { getActiveContext } from "@/lib/session";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { Button } from "@/components/ui/button";
 
@@ -11,17 +9,10 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, all, active, role } = await getActiveContext();
   if (!user) redirect("/login");
 
-  const { active, all } = await resolveActiveWorkspace(supabase, user.id);
   const activeId = active?.id ?? "";
-  const role = active
-    ? await getWorkspaceRole(supabase, active.id, user.id)
-    : null;
 
   return (
     <div className="flex min-h-screen">

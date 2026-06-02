@@ -12,8 +12,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { fr } from "date-fns/locale";
-import { createClient } from "@/lib/supabase/server";
-import { resolveActiveWorkspace } from "@/lib/workspace";
+import { getActiveContext } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 type CalendarPost = {
@@ -32,13 +31,8 @@ export default async function CalendarPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const { month } = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user, active } = await getActiveContext();
   if (!user) redirect("/login");
-
-  const { active } = await resolveActiveWorkspace(supabase, user.id);
   if (!active) redirect("/");
 
   const base =
