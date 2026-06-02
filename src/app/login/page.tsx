@@ -26,10 +26,16 @@ export default function LoginPage() {
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "").trim();
 
+    // Conserve une destination post-connexion (ex : page d'invitation).
+    const next = new URLSearchParams(window.location.search).get("next");
+    const callback = next
+      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${window.location.origin}/auth/callback`;
+
     const supabase = createClient();
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: callback },
     });
 
     if (otpError) {
