@@ -11,6 +11,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Dossier de build override-able (E2E utilise un .next séparé pour ne jamais
+  // corrompre un `npm run dev` lancé à la main en parallèle).
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
