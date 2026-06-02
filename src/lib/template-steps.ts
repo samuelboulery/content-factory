@@ -28,15 +28,15 @@ export const DEFAULT_EVENT_STEPS: EventStep[] = [
   },
 ];
 
-/** Étapes du workspace, ou le défaut si aucune n'est encore enregistrée. */
+/** Étapes d'un template, ou le défaut si aucune n'est enregistrée (US-3.4). */
 export async function getTemplateSteps(
   supabase: SupabaseClient,
-  workspaceId: string,
+  templateId: string,
 ): Promise<EventStep[]> {
   const { data } = await supabase
     .from("template_steps")
     .select("offset_days, intention, info_required")
-    .eq("workspace_id", workspaceId)
+    .eq("template_id", templateId)
     .order("position", { ascending: true });
 
   if (data && data.length > 0) {
@@ -49,14 +49,16 @@ export async function getTemplateSteps(
   return DEFAULT_EVENT_STEPS;
 }
 
-/** Remplace les étapes du workspace (overwrite : config, pas append-only). */
+/** Remplace les étapes d'un template (overwrite : config, pas append-only). */
 export async function saveTemplateSteps(
   supabase: SupabaseClient,
+  templateId: string,
   workspaceId: string,
   steps: EventStep[],
 ): Promise<void> {
-  await supabase.from("template_steps").delete().eq("workspace_id", workspaceId);
+  await supabase.from("template_steps").delete().eq("template_id", templateId);
   const rows = steps.map((step, index) => ({
+    template_id: templateId,
     workspace_id: workspaceId,
     position: index,
     offset_days: step.offset_days,

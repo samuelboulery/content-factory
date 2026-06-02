@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format, parseISO } from "date-fns";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -10,7 +10,17 @@ import {
 } from "@/lib/types";
 import { checkCompliance } from "@/lib/compliance";
 import { editCommunicationAction } from "@/lib/communication-actions";
+import {
+  addSubmissionToMatterAction,
+  generateQuestionsAction,
+} from "@/lib/intervenant-actions";
+import { getWorkspaceRole } from "@/lib/members";
 import { PostCard } from "@/components/PostCard";
+import { SubmitButton } from "@/components/SubmitButton";
+import {
+  CommunicationTimeline,
+  type TimelineItem,
+} from "@/components/CommunicationTimeline";
 import { CopyButton } from "@/components/CopyButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,10 +32,10 @@ export default async function CommunicationPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ regenError?: string }>;
+  searchParams: Promise<{ regenError?: string; qError?: string }>;
 }) {
   const { id } = await params;
-  const { regenError } = await searchParams;
+  const { regenError, qError } = await searchParams;
   const supabase = await createClient();
 
   // RLS scope automatiquement aux communications du workspace de l'utilisateur.
@@ -36,6 +46,15 @@ export default async function CommunicationPage({
     .maybeSingle();
   const comm = (commData ?? null) as Communication | null;
   if (!comm) notFound();
+
+  // Rôle de l'utilisateur dans le workspace de la com → gating des écritures (US-1.5).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const role = user
+    ? await getWorkspaceRole(supabase, comm.workspace_id ?? "", user.id)
+    : null;
+  const canWrite = role === "owner" || role === "editor";
 
   const { data: postsData } = await supabase
     .from("posts")
@@ -68,6 +87,22 @@ export default async function CommunicationPage({
     post.published_at !== null &&
     new Date(post.published_at).getTime() < factsUpdatedAt;
 
+  // Timeline du rétroplanning : offset de chaque post relatif à l'événement (US-7.3).
+  const offsetLabel = (scheduled: string): string => {
+    const d = differenceInCalendarDays(parseISO(scheduled), parseISO(comm.event_date));
+    if (d === 0) return "Jour J";
+    return d < 0 ? `J${d}` : `J+${d}`;
+  };
+  const timelineItems: TimelineItem[] = posts.map((post) => ({
+    id: post.id,
+    offsetLabel: offsetLabel(post.scheduled_date),
+    dateLabel: format(parseISO(post.scheduled_date), "d MMMM yyyy", {
+      locale: fr,
+    }),
+    status: post.status,
+    title: post.so_what ?? post.content.slice(0, 90),
+  }));
+
   return (
     <main className="mx-auto max-w-3xl p-8">
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
@@ -79,6 +114,7 @@ export default async function CommunicationPage({
         <p className="text-muted-foreground">
           {eventDateLabel}
           {comm.event_location ? ` · ${comm.event_location}` : ""}
+          {` · ${comm.network}`}
         </p>
         {total > 0 ? (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -105,6 +141,40 @@ export default async function CommunicationPage({
         </div>
       </section>
 
+      <section className="mb-6 rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-sm font-medium">
+            Questions à poser aux intervenants (IA)
+          </h2>
+          {canWrite ? (
+            <form action={generateQuestionsAction}>
+              <input type="hidden" name="communication_id" value={comm.id} />
+              <SubmitButton pendingLabel="Génération…">
+                {comm.suggested_questions.length > 0 ? "Régénérer" : "Générer"}
+              </SubmitButton>
+            </form>
+          ) : null}
+        </div>
+        {qError ? (
+          <p className="mt-2 text-xs text-red-600">
+            Génération des questions échouée. Réessaie.
+          </p>
+        ) : null}
+        {comm.suggested_questions.length > 0 ? (
+          <ul className="mt-2 list-inside list-disc text-sm text-muted-foreground">
+            {comm.suggested_questions.map((question, idx) => (
+              <li key={`${question}-${idx}`}>{question}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Génère des questions adaptées à l&apos;événement pour guider les
+            intervenants.
+          </p>
+        )}
+      </section>
+
+      {canWrite ? (
       <details className="mb-6 rounded-lg border p-4">
         <summary className="cursor-pointer text-sm font-medium">
           Éditer la fiche (faits durs)
@@ -160,6 +230,7 @@ export default async function CommunicationPage({
           </p>
         </form>
       </details>
+      ) : null}
 
       {submissions.length > 0 ? (
         <section className="mb-6">
@@ -173,6 +244,11 @@ export default async function CommunicationPage({
                   {submission.name}
                   {submission.role ? ` · ${submission.role}` : ""}
                 </div>
+                {submission.subject ? (
+                  <p className="text-muted-foreground">
+                    Sujet : {submission.subject}
+                  </p>
+                ) : null}
                 {submission.bio ? (
                   <p className="text-muted-foreground">{submission.bio}</p>
                 ) : null}
@@ -180,6 +256,33 @@ export default async function CommunicationPage({
                   <p className="mt-1 whitespace-pre-wrap">
                     {submission.message}
                   </p>
+                ) : null}
+                {submission.link ? (
+                  <a
+                    href={submission.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block text-xs text-blue-600 underline"
+                  >
+                    {submission.link}
+                  </a>
+                ) : null}
+                {canWrite ? (
+                  <form action={addSubmissionToMatterAction} className="mt-2">
+                    <input
+                      type="hidden"
+                      name="communication_id"
+                      value={comm.id}
+                    />
+                    <input
+                      type="hidden"
+                      name="submission_id"
+                      value={submission.id}
+                    />
+                    <SubmitButton pendingLabel="Ajout…">
+                      Ajouter à la matière
+                    </SubmitButton>
+                  </form>
                 ) : null}
               </li>
             ))}
@@ -192,6 +295,16 @@ export default async function CommunicationPage({
           La régénération a échoué (erreur LLM). Le post n&apos;a pas été
           modifié. Réessaie.
         </p>
+      ) : null}
+
+      {timelineItems.length > 0 ? (
+        <section className="mb-6 rounded-lg border p-4">
+          <h2 className="mb-4 text-sm font-medium">Rétroplanning</h2>
+          <CommunicationTimeline
+            items={timelineItems}
+            eventDateLabel={eventDateLabel}
+          />
+        </section>
       ) : null}
 
       <div className="flex flex-col gap-4">
@@ -208,11 +321,15 @@ export default async function CommunicationPage({
               dateLabel={format(parseISO(post.scheduled_date), "d MMMM yyyy", {
                 locale: fr,
               })}
+              scheduledDate={post.scheduled_date}
               soWhat={post.so_what}
               compliance={checkCompliance(post.content)}
               status={post.status}
               edited={post.edited}
               diverged={isDiverged(post)}
+              previousVersions={post.previous_versions ?? []}
+              aiReview={post.ai_review ?? null}
+              canWrite={canWrite}
             />
           ))
         )}
