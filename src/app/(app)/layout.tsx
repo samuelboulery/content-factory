@@ -27,6 +27,9 @@ export default async function AppLayout({
           <Link href="/" className="rounded-md px-3 py-2 hover:bg-muted">
             Dashboard
           </Link>
+          <Link href="/calendar" className="rounded-md px-3 py-2 hover:bg-muted">
+            Calendrier
+          </Link>
           <Link href="/settings" className="rounded-md px-3 py-2 hover:bg-muted">
             Réglages
           </Link>
