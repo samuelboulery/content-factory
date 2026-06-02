@@ -62,7 +62,7 @@ Supabase : création projet, migrations et clés via MCP. Schéma = source de v�
 - **Ne jamais committer `.env.local`** ni aucune clé.
 - **Demander avant d'ajouter une dépendance** hors stack listée.
 - **Demander avant toute action destructive** (rm, reset --hard, DB reset).
-- Scope actuel : auth + multi-workspace + switcher + settings + charte versionnée + régénération/édition de posts. Pas encore : verdict par post (US-5.9), historique de régénération (US-5.10), calendrier, visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
+- Scope actuel : auth + multi-workspace + switcher + settings + charte versionnée + régénération/édition + statut publié & verdict par post. Pas encore : historique de régénération (US-5.10), flag divergence faits durs (US-5.13), calendrier (US-7.2), visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
 
 ## Environment Variables
 

@@ -14,8 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/SubmitButton";
-import { editPostAction, regeneratePostAction } from "@/lib/post-actions";
+import {
+  editPostAction,
+  regeneratePostAction,
+  updatePostStateAction,
+} from "@/lib/post-actions";
 import type { ComplianceResult } from "@/lib/compliance";
+import type { PostStatus, PostVerdict } from "@/lib/types";
 
 interface PostCardProps {
   postId: string;
@@ -23,13 +28,44 @@ interface PostCardProps {
   dateLabel: string;
   soWhat: string | null;
   compliance: ComplianceResult;
+  status: PostStatus;
+  verdict: PostVerdict | null;
 }
 
-// Couleur du badge selon le score de conformité (Tailwind, pas d'inline style).
-function badgeClasses(score: number): string {
+// Couleur du badge conformité selon le score (Tailwind, pas d'inline style).
+function complianceClasses(score: number): string {
   if (score >= 80) return "bg-green-600 text-white";
   if (score >= 50) return "bg-orange-500 text-white";
   return "bg-red-600 text-white";
+}
+
+function statusLabel(status: PostStatus, verdict: PostVerdict | null): string {
+  if (verdict === "rejected") return "Rejeté";
+  if (status === "published") {
+    return verdict === "edited" ? "Publié (édité)" : "Publié tel quel";
+  }
+  return "À publier";
+}
+
+// Bouton d'action de statut (form + server action).
+function StateButton({
+  postId,
+  state,
+  children,
+}: {
+  postId: string;
+  state: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <form action={updatePostStateAction}>
+      <input type="hidden" name="post_id" value={postId} />
+      <input type="hidden" name="state" value={state} />
+      <Button type="submit" variant="outline" size="sm">
+        {children}
+      </Button>
+    </form>
+  );
 }
 
 export function PostCard({
@@ -38,6 +74,8 @@ export function PostCard({
   dateLabel,
   soWhat,
   compliance,
+  status,
+  verdict,
 }: PostCardProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
     "idle",
@@ -55,17 +93,27 @@ export function PostCard({
     }
   }
 
+  const settled = status === "published" || verdict === "rejected";
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-muted-foreground">{dateLabel}</CardTitle>
         <CardAction>
-          <Badge className={badgeClasses(compliance.score)}>
+          <Badge className={complianceClasses(compliance.score)}>
             Conformité {compliance.score}%
           </Badge>
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-3">
+        <Badge
+          variant={verdict === "rejected" ? "destructive" : "secondary"}
+          className={
+            status === "published" ? "bg-green-600 text-white" : undefined
+          }
+        >
+          {statusLabel(status, verdict)}
+        </Badge>
         <p className="leading-relaxed whitespace-pre-wrap">{content}</p>
         {soWhat ? (
           <p className="text-sm text-muted-foreground italic">
@@ -110,6 +158,26 @@ export function PostCard({
           >
             Régénérer
           </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {settled ? (
+            <StateButton postId={postId} state="reset">
+              Remettre à publier
+            </StateButton>
+          ) : (
+            <>
+              <StateButton postId={postId} state="as_is">
+                Publié tel quel
+              </StateButton>
+              <StateButton postId={postId} state="edited">
+                Publié (édité)
+              </StateButton>
+              <StateButton postId={postId} state="rejected">
+                Rejeter
+              </StateButton>
+            </>
+          )}
         </div>
 
         {mode === "edit" ? (

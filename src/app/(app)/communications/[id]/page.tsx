@@ -38,6 +38,10 @@ export default async function CommunicationPage({
     locale: fr,
   });
 
+  const total = posts.length;
+  const publishedCount = posts.filter((p) => p.status === "published").length;
+  const asIsCount = posts.filter((p) => p.verdict === "as_is").length;
+
   return (
     <main className="mx-auto max-w-3xl p-8">
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
@@ -50,6 +54,12 @@ export default async function CommunicationPage({
           {eventDateLabel}
           {comm.event_location ? ` · ${comm.event_location}` : ""}
         </p>
+        {total > 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {publishedCount}/{total} publiés · {asIsCount} tel quel (sans
+            édition)
+          </p>
+        ) : null}
       </header>
 
       {regenError ? (
@@ -75,6 +85,8 @@ export default async function CommunicationPage({
               })}
               soWhat={post.so_what}
               compliance={checkCompliance(post.content)}
+              status={post.status}
+              verdict={post.verdict}
             />
           ))
         )}

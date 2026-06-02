@@ -106,3 +106,44 @@ export async function editPostAction(formData: FormData) {
   await supabase.from("posts").update({ content }).eq("id", postId);
   redirect(`/communications/${post.communication_id}`);
 }
+
+/** Statut + verdict d'un post (US-8.2 publication, US-5.9 verdict qualité). */
+export async function updatePostStateAction(formData: FormData) {
+  const postId = String(formData.get("post_id") ?? "");
+  const state = String(formData.get("state") ?? "");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  let update: { status: string; verdict: string | null };
+  switch (state) {
+    case "as_is":
+      update = { status: "published", verdict: "as_is" };
+      break;
+    case "edited":
+      update = { status: "published", verdict: "edited" };
+      break;
+    case "rejected":
+      update = { status: "to_publish", verdict: "rejected" };
+      break;
+    case "reset":
+      update = { status: "to_publish", verdict: null };
+      break;
+    default:
+      redirect("/");
+  }
+
+  const { data: postData } = await supabase
+    .from("posts")
+    .select("communication_id")
+    .eq("id", postId)
+    .maybeSingle();
+  const post = postData as { communication_id: string } | null;
+  if (!post) redirect("/");
+
+  await supabase.from("posts").update(update).eq("id", postId);
+  redirect(`/communications/${post.communication_id}`);
+}
