@@ -24,6 +24,13 @@ export type Communication = {
   created_at: string;
 };
 
+/** Une étape du rétroplanning (offset + intention + niveau d'info attendu). */
+export type EventStep = {
+  offset_days: number;
+  intention: string;
+  info_required: string | null;
+};
+
 export type IntervenantSubmission = {
   id: string;
   communication_id: string;

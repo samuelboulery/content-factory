@@ -69,6 +69,11 @@ créer de nouveaux (champ « Nouveau workspace »). Le workspace actif (cookie
 (périmètre de l'asso) et des réseaux ciblés (LinkedIn, Instagram…). Le contexte est
 injecté dans la génération pour cadrer l'IA.
 
+**Rétroplanning paramétrable** : dans `/settings`, les étapes du template Event
+(offset en jours + intention + niveau d'info attendu) sont éditables. La génération
+chaîne autant de posts qu'il y a d'étapes ; les dates sont calculées depuis les offsets
+(déterministe). Défaut : J-30 / J-15 / J-5 / J-1.
+
 **Charte éditoriale versionnée** : éditable par workspace dans `/settings`. Chaque
 enregistrement crée une nouvelle version (append-only) ; l'historique permet de
 restaurer une version antérieure. La génération utilise la charte active du workspace

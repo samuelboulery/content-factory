@@ -3,7 +3,9 @@ import { addDays, format, isValid, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkspaceContext, resolveActiveWorkspace } from "@/lib/workspace";
 import { getActiveCharter } from "@/lib/charter-versions";
+import { getTemplateSteps } from "@/lib/template-steps";
 import { generatePosts, type EventFacts } from "@/lib/llm";
+import { type EventStep } from "@/lib/types";
 
 // La génération DeepSeek (4 posts) peut être longue : on relève la limite.
 export const maxDuration = 60;
@@ -71,21 +73,23 @@ export async function POST(request: Request) {
   let workspaceId: string;
   let charter: string;
   let context: string;
+  let steps: EventStep[];
   try {
     const { active } = await resolveActiveWorkspace(supabase, user.id);
     workspaceId = active.id;
     charter = (await getActiveCharter(supabase, active.id)).content;
     context = buildWorkspaceContext(active);
+    steps = await getTemplateSteps(supabase, active.id);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Workspace introuvable.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  // 2) Génération IA (avec la charte + le contexte du workspace)
+  // 2) Génération IA (charte + contexte + rétroplanning du workspace)
   let posts;
   try {
-    posts = await generatePosts(facts, intervenants, charter, context);
+    posts = await generatePosts(facts, intervenants, charter, context, steps);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Échec de la génération IA.";

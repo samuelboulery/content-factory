@@ -143,3 +143,23 @@ end;
 $$;
 revoke all on function public.submit_intervenant(uuid, text, text, text, text) from public;
 grant execute on function public.submit_intervenant(uuid, text, text, text, text) to anon, authenticated;
+
+-- ── Rétroplanning paramétrable (template Event, US-3.1/3.3) ──────────────────
+create table if not exists template_steps (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  position int not null,
+  offset_days int not null,
+  intention text not null,
+  info_required text,
+  created_at timestamptz not null default now(),
+  unique (workspace_id, position)
+);
+create index if not exists template_steps_workspace_idx on template_steps(workspace_id);
+
+alter table template_steps enable row level security;
+drop policy if exists template_steps_owner_all on template_steps;
+create policy template_steps_owner_all on template_steps
+  for all
+  using (workspace_id in (select id from workspaces where owner_id = auth.uid()))
+  with check (workspace_id in (select id from workspaces where owner_id = auth.uid()));

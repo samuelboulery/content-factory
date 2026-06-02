@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Workspace } from "./types";
 import { TDS_CHARTER } from "./charter";
 import { saveCharterVersion } from "./charter-versions";
+import { DEFAULT_EVENT_STEPS, saveTemplateSteps } from "./template-steps";
 
 export const ACTIVE_WORKSPACE_COOKIE = "cf_active_workspace";
 const DEFAULT_WORKSPACE_NAME = "The Design Society";
@@ -35,8 +36,9 @@ export async function createWorkspace(
     );
   }
   const workspace = data as Workspace;
-  // Seed la charte v1 (TDS par défaut), éditable ensuite via /settings.
+  // Seed la charte v1 + le rétroplanning Event par défaut, éditables via /settings.
   await saveCharterVersion(supabase, workspace.id, TDS_CHARTER);
+  await saveTemplateSteps(supabase, workspace.id, DEFAULT_EVENT_STEPS);
   return workspace;
 }
 

@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import type { EventStep } from './types';
 
 /** Faits durs de l'événement (jamais inventés par l'IA). */
 export type EventFacts = {
@@ -24,6 +25,7 @@ function buildPrompt(
   intervenants: string,
   charter: string,
   context: string,
+  steps: EventStep[],
 ): string {
   const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
   const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
@@ -32,6 +34,16 @@ function buildPrompt(
   const contexteBlock = context.trim()
     ? `\n<contexte_general>\n${context.trim()}\n</contexte_general>\n`
     : '';
+  const count = steps.length;
+  const missionSteps = steps
+    .map(
+      (step, i) =>
+        `- Post ${i + 1} (J${step.offset_days}) — Intention : ${step.intention} Info attendue : ${step.info_required ?? '—'}.`,
+    )
+    .join('\n');
+  const outputItems = steps
+    .map(() => `    { "content": "...", "so_what": "..." }`)
+    .join(',\n');
 
   return `Tu es un rédacteur senior pour l'association The Design Society.
 
@@ -64,14 +76,11 @@ Le niveau d'info attendu de chaque post est indiqué dans sa fiche d'intention c
 </regle_anti_hallucination_contextuelle>
 
 <mission>
-Génère 4 posts LinkedIn en chaîne chronologique pour annoncer cet événement, en respectant strictement la charte.
+Génère ${count} posts LinkedIn en chaîne chronologique pour annoncer cet événement, en respectant strictement la charte.
 
-Les 4 posts forment UNE campagne cohérente, pas 4 variations du même post. Chaque post connaît les précédents et prolonge le récit. Voici l'intention narrative et le niveau d'info attendu de chacun :
+Les ${count} posts forment UNE campagne cohérente, pas des variations du même post. Chaque post connaît les précédents et prolonge le récit. Voici l'intention narrative et le niveau d'info attendu de chacun, dans l'ordre :
 
-- Post 1 (J-30) — Intention : SAVE THE DATE / teasing. Info attendue : date + lieu suffisent. Les intervenants peuvent être absents (manque normal → teasing assumé).
-- Post 2 (J-15) — Intention : approfondissement contenu et intervenants. Info attendue : matière intervenants. Si absente → [À COMPLÉTER].
-- Post 3 (J-5) — Intention : rappel + détails pratiques. Info attendue : tous les faits durs. Si manquants → [À COMPLÉTER].
-- Post 4 (J-1) — Intention : rappel jour J, urgence douce. Info attendue : tout.
+${missionSteps}
 
 Chaque post doit faire entre 600 et 1200 caractères.
 
@@ -79,14 +88,12 @@ Pour CHAQUE post, applique le filtre "so what" : quel bénéfice concret le lect
 </mission>
 
 <output_format>
-Réponds en JSON valide UNIQUEMENT, sans préambule, sans markdown, sans backticks :
+Réponds en JSON valide UNIQUEMENT, sans préambule, sans markdown, sans backticks.
+Le tableau "posts" doit contenir EXACTEMENT ${count} entrées, dans l'ordre des intentions ci-dessus :
 
 {
   "posts": [
-    { "scheduled_offset_days": -30, "content": "...", "so_what": "..." },
-    { "scheduled_offset_days": -15, "content": "...", "so_what": "..." },
-    { "scheduled_offset_days": -5, "content": "...", "so_what": "..." },
-    { "scheduled_offset_days": -1, "content": "...", "so_what": "..." }
+${outputItems}
   ]
 }
 </output_format>`;
@@ -101,10 +108,17 @@ export async function generatePosts(
   intervenants: string,
   charter: string,
   context: string,
+  steps: EventStep[],
 ): Promise<GeneratedPost[]> {
-  const prompt = buildPrompt(facts, intervenants, charter, context);
+  const prompt = buildPrompt(facts, intervenants, charter, context, steps);
   const raw = await callDeepSeek(prompt);
-  return parsePostsJson(raw);
+  const parsed = parsePostsJson(raw, steps.length);
+  // Les offsets viennent du template (déterministe), pas de la réponse du LLM.
+  return parsed.map((post, index) => ({
+    scheduled_offset_days: steps[index].offset_days,
+    content: post.content,
+    so_what: post.so_what,
+  }));
 }
 
 /** Appel brut DeepSeek (mode JSON) → retourne le contenu texte du message. */
@@ -160,7 +174,10 @@ function extractMessageContent(data: unknown): string {
  * Parsing défensif : le modèle peut renvoyer des backticks markdown malgré la consigne.
  * On strip les fences, on isole l'objet JSON, on valide la forme.
  */
-function parsePostsJson(raw: string): GeneratedPost[] {
+function parsePostsJson(
+  raw: string,
+  expectedCount: number,
+): { content: string; so_what: string }[] {
   let cleaned = raw.trim();
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
@@ -183,32 +200,30 @@ function parsePostsJson(raw: string): GeneratedPost[] {
   }
 
   const posts = (parsed as { posts: unknown }).posts;
-  if (!Array.isArray(posts) || posts.length !== 4) {
+  if (!Array.isArray(posts) || posts.length !== expectedCount) {
     const got = Array.isArray(posts) ? posts.length : 'aucun';
-    throw new Error(`Le LLM doit renvoyer exactement 4 posts (reçu : ${got}).`);
+    throw new Error(`Le LLM doit renvoyer exactement ${expectedCount} posts (reçu : ${got}).`);
   }
 
   return posts.map((post, index) => validatePost(post, index));
 }
 
-function validatePost(post: unknown, index: number): GeneratedPost {
+function validatePost(
+  post: unknown,
+  index: number,
+): { content: string; so_what: string } {
   if (typeof post !== 'object' || post === null) {
     throw new Error(`Post ${index + 1} : format invalide.`);
   }
   const obj = post as Record<string, unknown>;
-  const offset = obj.scheduled_offset_days;
   const content = obj.content;
   const soWhat = obj.so_what;
 
-  if (typeof offset !== 'number') {
-    throw new Error(`Post ${index + 1} : scheduled_offset_days manquant ou non numérique.`);
-  }
   if (typeof content !== 'string' || content.trim() === '') {
     throw new Error(`Post ${index + 1} : content manquant.`);
   }
 
   return {
-    scheduled_offset_days: offset,
     content,
     so_what: typeof soWhat === 'string' ? soWhat : '',
   };

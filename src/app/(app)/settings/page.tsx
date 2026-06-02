@@ -13,7 +13,10 @@ import {
   rollbackCharterAction,
 } from "@/lib/charter-actions";
 import { saveWorkspaceSettingsAction } from "@/lib/workspace-actions";
+import { saveTemplateStepsAction } from "@/lib/template-actions";
+import { getTemplateSteps } from "@/lib/template-steps";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -29,6 +32,7 @@ export default async function SettingsPage() {
   const { active } = await resolveActiveWorkspace(supabase, user.id);
   const charter = await getActiveCharter(supabase, active.id);
   const versions = await listCharterVersions(supabase, active.id);
+  const steps = await getTemplateSteps(supabase, active.id);
 
   return (
     <main className="mx-auto max-w-3xl p-8">
@@ -81,6 +85,53 @@ export default async function SettingsPage() {
           </div>
           <Button type="submit" className="self-start">
             Enregistrer le contexte
+          </Button>
+        </form>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-medium">Rétroplanning (template Event)</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Offsets (en jours, négatifs avant l&apos;événement) + intention de
+          chaque post. Utilisé pour la génération chaînée.
+        </p>
+        <form
+          action={saveTemplateStepsAction}
+          className="mt-3 flex flex-col gap-3"
+        >
+          {steps.map((step, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-lg border p-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor={`offset-${i}`} className="text-xs">
+                  Jour (offset)
+                </Label>
+                <Input
+                  id={`offset-${i}`}
+                  name="offset_days"
+                  type="number"
+                  defaultValue={step.offset_days}
+                  required
+                  className="w-24"
+                />
+                <Input
+                  name="info_required"
+                  defaultValue={step.info_required ?? ""}
+                  placeholder="Info attendue (ex : date + lieu)"
+                  className="flex-1 text-sm"
+                />
+              </div>
+              <Textarea
+                name="intention"
+                defaultValue={step.intention}
+                rows={2}
+                required
+                placeholder="Intention narrative du post"
+                className="text-sm"
+              />
+            </div>
+          ))}
+          <Button type="submit" className="self-start">
+            Enregistrer le rétroplanning
           </Button>
         </form>
       </section>
