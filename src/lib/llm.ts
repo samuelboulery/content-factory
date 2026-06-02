@@ -1,6 +1,5 @@
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { TDS_CHARTER } from './charter';
 
 /** Faits durs de l'événement (jamais inventés par l'IA). */
 export type EventFacts = {
@@ -20,7 +19,11 @@ export type GeneratedPost = {
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_MODEL = 'deepseek-chat';
 
-function buildPrompt(facts: EventFacts, intervenants: string): string {
+function buildPrompt(
+  facts: EventFacts,
+  intervenants: string,
+  charter: string,
+): string {
   const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
   const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
   const lien = facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]';
@@ -29,7 +32,7 @@ function buildPrompt(facts: EventFacts, intervenants: string): string {
   return `Tu es un rédacteur senior pour l'association The Design Society.
 
 <charte>
-${TDS_CHARTER}
+${charter}
 </charte>
 
 <faits_durs>
@@ -92,13 +95,14 @@ Réponds en JSON valide UNIQUEMENT, sans préambule, sans markdown, sans backtic
 export async function generatePosts(
   facts: EventFacts,
   intervenants: string,
+  charter: string,
 ): Promise<GeneratedPost[]> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     throw new Error('DEEPSEEK_API_KEY manquante côté serveur (.env.local).');
   }
 
-  const prompt = buildPrompt(facts, intervenants);
+  const prompt = buildPrompt(facts, intervenants, charter);
 
   let response: Response;
   try {

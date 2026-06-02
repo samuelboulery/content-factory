@@ -29,3 +29,12 @@ export type Post = {
   status: PostStatus;
   created_at: string;
 };
+
+/** Charte éditoriale versionnée (append-only ; la version la plus haute est active). */
+export type CharterVersion = {
+  id: string;
+  workspace_id: string;
+  content: string;
+  version: number;
+  created_at: string;
+};

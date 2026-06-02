@@ -1,5 +1,5 @@
 -- Content Factory — schéma complet (source de vérité)
--- Tables : workspaces + communications (faits durs) + posts (4 posts/com)
+-- Tables : workspaces + charter_versions + communications + posts
 -- Auth : Supabase Auth (magic link). RLS activée, policies owner-scoped via auth.uid().
 
 create extension if not exists pgcrypto;
@@ -10,6 +10,16 @@ create table if not exists workspaces (
   name text not null,
   owner_id uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now()
+);
+
+-- Charte éditoriale versionnée (append-only ; la version la plus haute est active)
+create table if not exists charter_versions (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  content text not null,
+  version integer not null,
+  created_at timestamptz not null default now(),
+  unique (workspace_id, version)
 );
 
 create table if not exists communications (
@@ -34,11 +44,13 @@ create table if not exists posts (
 );
 
 create index if not exists workspaces_owner_id_idx on workspaces(owner_id);
+create index if not exists charter_versions_workspace_idx on charter_versions(workspace_id);
 create index if not exists communications_workspace_id_idx on communications(workspace_id);
 create index if not exists posts_communication_id_idx on posts(communication_id);
 
 -- RLS : chaque utilisateur ne voit que les données de ses workspaces.
 alter table workspaces enable row level security;
+alter table charter_versions enable row level security;
 alter table communications enable row level security;
 alter table posts enable row level security;
 
@@ -47,6 +59,12 @@ create policy workspaces_owner_all on workspaces
   for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
+
+drop policy if exists charter_versions_owner_all on charter_versions;
+create policy charter_versions_owner_all on charter_versions
+  for all
+  using (workspace_id in (select id from workspaces where owner_id = auth.uid()))
+  with check (workspace_id in (select id from workspaces where owner_id = auth.uid()));
 
 drop policy if exists communications_owner_all on communications;
 create policy communications_owner_all on communications

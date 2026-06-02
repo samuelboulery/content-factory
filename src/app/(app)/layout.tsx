@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveWorkspace } from "@/lib/workspace";
@@ -22,6 +23,14 @@ export default async function AppLayout({
       <aside className="flex w-60 shrink-0 flex-col gap-6 border-r p-4">
         <div className="text-sm font-semibold">Content Factory</div>
         <WorkspaceSwitcher workspaces={all} activeId={active.id} />
+        <nav className="flex flex-col gap-1 text-sm">
+          <Link href="/" className="rounded-md px-3 py-2 hover:bg-muted">
+            Dashboard
+          </Link>
+          <Link href="/settings" className="rounded-md px-3 py-2 hover:bg-muted">
+            Réglages
+          </Link>
+        </nav>
         <div className="mt-auto text-xs text-muted-foreground">
           <div className="mb-2 truncate">{user.email}</div>
           <form action="/auth/signout" method="post">

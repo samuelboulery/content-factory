@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Workspace } from "./types";
+import { TDS_CHARTER } from "./charter";
+import { saveCharterVersion } from "./charter-versions";
 
 export const ACTIVE_WORKSPACE_COOKIE = "cf_active_workspace";
 const DEFAULT_WORKSPACE_NAME = "The Design Society";
@@ -32,7 +34,10 @@ export async function createWorkspace(
       `Création du workspace échouée : ${error?.message ?? "inconnue"}`,
     );
   }
-  return data as Workspace;
+  const workspace = data as Workspace;
+  // Seed la charte v1 (TDS par défaut), éditable ensuite via /settings.
+  await saveCharterVersion(supabase, workspace.id, TDS_CHARTER);
+  return workspace;
 }
 
 /**

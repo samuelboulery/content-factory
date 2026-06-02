@@ -65,6 +65,11 @@ Connexion par **magic link** (Supabase Auth). Au 1er login, un workspace
 créer de nouveaux (champ « Nouveau workspace »). Le workspace actif (cookie
 `cf_active_workspace`) scope les communications affichées et créées.
 
+**Charte éditoriale versionnée** : éditable par workspace dans `/settings`. Chaque
+enregistrement crée une nouvelle version (append-only) ; l'historique permet de
+restaurer une version antérieure. La génération utilise la charte active du workspace
+(la constante `TDS_CHARTER` sert de version 1 par défaut). Table `charter_versions`.
+
 **Config Supabase requise** (dashboard → Authentication → URL Configuration) :
 - **Site URL** : `http://localhost:3000` (en dev)
 - **Redirect URLs** : ajouter `http://localhost:3000/**`

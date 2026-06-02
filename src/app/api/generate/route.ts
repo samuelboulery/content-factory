@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { addDays, format, isValid, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveWorkspace } from "@/lib/workspace";
+import { getActiveCharter } from "@/lib/charter-versions";
 import { generatePosts, type EventFacts } from "@/lib/llm";
 
 // La génération DeepSeek (4 posts) peut être longue : on relève la limite.
@@ -66,25 +67,27 @@ export async function POST(request: Request) {
     eventLink: eventLink || undefined,
   };
 
-  // 1) Génération IA
-  let posts;
-  try {
-    posts = await generatePosts(facts, intervenants);
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Échec de la génération IA.";
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
-
-  // 2) Workspace actif de l'utilisateur (créé si absent)
+  // 1) Workspace actif (créé si absent) + charte active du workspace
   let workspaceId: string;
+  let charter: string;
   try {
     const { active } = await resolveActiveWorkspace(supabase, user.id);
     workspaceId = active.id;
+    charter = (await getActiveCharter(supabase, active.id)).content;
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Workspace introuvable.";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  // 2) Génération IA (avec la charte du workspace)
+  let posts;
+  try {
+    posts = await generatePosts(facts, intervenants, charter);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Échec de la génération IA.";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 
   // 3) Insertion de la communication (scopée workspace)
