@@ -147,7 +147,8 @@ export async function generateQuestionsAction(formData: FormData) {
       .from("communications")
       .update({ suggested_questions: questions })
       .eq("id", communicationId);
-  } catch {
+  } catch (err) {
+    console.error("[generateQuestions]:", err);
     redirect(`/communications/${communicationId}?qError=1`);
   }
   redirect(`/communications/${communicationId}`);

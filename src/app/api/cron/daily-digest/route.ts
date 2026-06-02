@@ -43,13 +43,21 @@ export async function GET(request: NextRequest) {
           locale: fr,
         }),
       }));
-      await sendDailyDigest(
-        digest.recipients,
-        digest.workspaceName,
-        items,
-        baseUrl,
-      );
-      sent += 1;
+      try {
+        await sendDailyDigest(
+          digest.recipients,
+          digest.workspaceName,
+          items,
+          baseUrl,
+        );
+        sent += 1;
+      } catch (err) {
+        // Un envoi raté ne bloque pas les autres workspaces.
+        console.error(
+          `[cron/daily-digest] envoi échoué (${digest.workspaceName}):`,
+          err,
+        );
+      }
     }
     return NextResponse.json({
       ok: true,
@@ -58,6 +66,7 @@ export async function GET(request: NextRequest) {
       sent,
     });
   } catch (error) {
+    console.error("[cron/daily-digest]:", error);
     return NextResponse.json(
       { ok: false, error: getErrorMessage(error) },
       { status: 500 },
