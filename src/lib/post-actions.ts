@@ -103,7 +103,8 @@ export async function regeneratePostAction(formData: FormData) {
     let ai_review: PostReview | null;
     try {
       ai_review = await reviewSinglePost(charter, facts, content);
-    } catch {
+    } catch (reviewErr) {
+      console.error("[regeneratePost] relecture IA (best-effort):", reviewErr);
       ai_review = null;
     }
     // Snapshot de l'état courant AVANT écrasement, borné à 3, plus récent en tête (US-5.10).

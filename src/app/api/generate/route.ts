@@ -189,6 +189,13 @@ export async function POST(request: Request) {
   const rows = ordered.map((post) => {
     const base = addDays(eventDateObj, post.scheduled_offset_days);
     const scheduled_date = findFreeDate(base, occupied);
+    // Anti-collision best-effort (soft par design : la date reste éditable à la
+    // main). Fenêtre saturée → collision tolérée mais journalisée, pas silencieuse.
+    if (occupied.has(scheduled_date)) {
+      console.warn(
+        `[generate] collision de date tolérée (fenêtre saturée): ${scheduled_date}`,
+      );
+    }
     occupied.add(scheduled_date);
     return {
       communication_id: comm.id as string,

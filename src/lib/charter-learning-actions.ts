@@ -47,7 +47,8 @@ export async function analyzeCharterAction() {
   let result: { observations: string[]; addendum: string };
   try {
     result = await analyzeCharterLearnings(charter, diffs);
-  } catch {
+  } catch (err) {
+    console.error("[analyzeCharter]:", err);
     redirect("/settings?learn=error");
   }
 
