@@ -7,6 +7,7 @@ import {
   ACTIVE_WORKSPACE_COOKIE,
   createWorkspace,
   listWorkspaces,
+  resolveActiveWorkspace,
 } from "@/lib/workspace";
 
 const COOKIE_OPTIONS = {
@@ -47,4 +48,23 @@ export async function createWorkspaceAction(formData: FormData) {
   const cookieStore = await cookies();
   cookieStore.set(ACTIVE_WORKSPACE_COOKIE, workspace.id, COOKIE_OPTIONS);
   redirect("/");
+}
+
+/** Contexte général + réseaux ciblés du workspace actif (US-2.1/2.3). */
+export async function saveWorkspaceSettingsAction(formData: FormData) {
+  const context = String(formData.get("context") ?? "").trim();
+  const networks = formData.getAll("networks").map((value) => String(value));
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { active } = await resolveActiveWorkspace(supabase, user.id);
+  await supabase
+    .from("workspaces")
+    .update({ context: context || null, networks })
+    .eq("id", active.id);
+  redirect("/settings");
 }

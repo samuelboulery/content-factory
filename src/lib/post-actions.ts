@@ -5,12 +5,13 @@ import { fr } from "date-fns/locale";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveCharter } from "@/lib/charter-versions";
+import { buildWorkspaceContext } from "@/lib/workspace";
 import {
   regeneratePost,
   type CampaignPost,
   type EventFacts,
 } from "@/lib/llm";
-import type { Communication, Post } from "@/lib/types";
+import type { Communication, Post, Workspace } from "@/lib/types";
 
 /** Régénère un post avec une note, toute la campagne en contexte (US-5.2). */
 export async function regeneratePostAction(formData: FormData) {
@@ -49,6 +50,14 @@ export async function regeneratePostAction(formData: FormData) {
   const charter = (await getActiveCharter(supabase, comm.workspace_id ?? ""))
     .content;
 
+  const { data: wsData } = await supabase
+    .from("workspaces")
+    .select("*")
+    .eq("id", comm.workspace_id ?? "")
+    .maybeSingle();
+  const ws = wsData as Workspace | null;
+  const context = ws ? buildWorkspaceContext(ws) : "";
+
   const campaign: CampaignPost[] = siblings.map((post) => ({
     dateLabel: format(parseISO(post.scheduled_date), "d MMMM yyyy", {
       locale: fr,
@@ -68,6 +77,7 @@ export async function regeneratePostAction(formData: FormData) {
   try {
     const { content, so_what } = await regeneratePost({
       charter,
+      context,
       facts,
       campaign,
       note,

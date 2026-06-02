@@ -6,6 +6,8 @@ export type Workspace = {
   id: string;
   name: string;
   owner_id: string;
+  context: string | null;
+  networks: string[];
   created_at: string;
 };
 

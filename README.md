@@ -65,6 +65,10 @@ Connexion par **magic link** (Supabase Auth). Au 1er login, un workspace
 créer de nouveaux (champ « Nouveau workspace »). Le workspace actif (cookie
 `cf_active_workspace`) scope les communications affichées et créées.
 
+**Contexte & réseaux** : dans `/settings`, chaque workspace a un contexte général
+(périmètre de l'asso) et des réseaux ciblés (LinkedIn, Instagram…). Le contexte est
+injecté dans la génération pour cadrer l'IA.
+
 **Charte éditoriale versionnée** : éditable par workspace dans `/settings`. Chaque
 enregistrement crée une nouvelle version (append-only) ; l'historique permet de
 restaurer une version antérieure. La génération utilise la charte active du workspace

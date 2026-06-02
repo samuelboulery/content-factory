@@ -12,9 +12,12 @@ import {
   saveCharterAction,
   rollbackCharterAction,
 } from "@/lib/charter-actions";
+import { saveWorkspaceSettingsAction } from "@/lib/workspace-actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+const NETWORKS = ["LinkedIn", "Instagram", "Facebook", "Twitter/X"];
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -37,6 +40,52 @@ export default async function SettingsPage() {
       </h1>
 
       <section className="mt-6">
+        <h2 className="text-lg font-medium">Contexte & réseaux</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Le contexte général aide l&apos;IA à comprendre le périmètre. Il est
+          injecté dans la génération.
+        </p>
+        <form
+          action={saveWorkspaceSettingsAction}
+          className="mt-3 flex flex-col gap-4"
+        >
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="context">Contexte général</Label>
+            <Textarea
+              id="context"
+              name="context"
+              rows={4}
+              defaultValue={active.context ?? ""}
+              placeholder="Qui est l'asso, son périmètre, son public cible…"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium">Réseaux ciblés</span>
+            <div className="flex flex-wrap gap-4">
+              {NETWORKS.map((network) => (
+                <label
+                  key={network}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    name="networks"
+                    value={network}
+                    defaultChecked={active.networks.includes(network)}
+                    className="size-4"
+                  />
+                  {network}
+                </label>
+              ))}
+            </div>
+          </div>
+          <Button type="submit" className="self-start">
+            Enregistrer le contexte
+          </Button>
+        </form>
+      </section>
+
+      <section className="mt-8">
         <h2 className="text-lg font-medium">
           Charte éditoriale{" "}
           <span className="text-muted-foreground">

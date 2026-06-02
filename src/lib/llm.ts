@@ -23,18 +23,22 @@ function buildPrompt(
   facts: EventFacts,
   intervenants: string,
   charter: string,
+  context: string,
 ): string {
   const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
   const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
   const lien = facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]';
   const matiere = intervenants?.trim() ? intervenants.trim() : '[NON FOURNI]';
+  const contexteBlock = context.trim()
+    ? `\n<contexte_general>\n${context.trim()}\n</contexte_general>\n`
+    : '';
 
   return `Tu es un rédacteur senior pour l'association The Design Society.
 
 <charte>
 ${charter}
 </charte>
-
+${contexteBlock}
 <faits_durs>
 Nom : ${facts.eventName}
 Date : ${dateLong}
@@ -96,8 +100,9 @@ export async function generatePosts(
   facts: EventFacts,
   intervenants: string,
   charter: string,
+  context: string,
 ): Promise<GeneratedPost[]> {
-  const prompt = buildPrompt(facts, intervenants, charter);
+  const prompt = buildPrompt(facts, intervenants, charter, context);
   const raw = await callDeepSeek(prompt);
   return parsePostsJson(raw);
 }
@@ -219,14 +224,18 @@ export type CampaignPost = {
 
 function buildRegenPrompt(args: {
   charter: string;
+  context: string;
   facts: EventFacts;
   campaign: CampaignPost[];
   note: string;
 }): string {
-  const { charter, facts, campaign, note } = args;
+  const { charter, context, facts, campaign, note } = args;
   const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
   const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
   const lien = facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]';
+  const contexteBlock = context.trim()
+    ? `\n<contexte_general>\n${context.trim()}\n</contexte_general>\n`
+    : '';
 
   const campagne = campaign
     .map((p, i) => {
@@ -240,7 +249,7 @@ function buildRegenPrompt(args: {
 <charte>
 ${charter}
 </charte>
-
+${contexteBlock}
 <faits_durs>
 Nom : ${facts.eventName}
 Date : ${dateLong}
@@ -273,6 +282,7 @@ Réponds en JSON valide UNIQUEMENT, sans préambule ni backticks :
 /** Régénère un seul post en tenant compte de toute la campagne + d'une note. */
 export async function regeneratePost(args: {
   charter: string;
+  context: string;
   facts: EventFacts;
   campaign: CampaignPost[];
   note: string;

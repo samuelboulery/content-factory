@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { addDays, format, isValid, parseISO } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { resolveActiveWorkspace } from "@/lib/workspace";
+import { buildWorkspaceContext, resolveActiveWorkspace } from "@/lib/workspace";
 import { getActiveCharter } from "@/lib/charter-versions";
 import { generatePosts, type EventFacts } from "@/lib/llm";
 
@@ -67,23 +67,25 @@ export async function POST(request: Request) {
     eventLink: eventLink || undefined,
   };
 
-  // 1) Workspace actif (créé si absent) + charte active du workspace
+  // 1) Workspace actif (créé si absent) + charte active + contexte du workspace
   let workspaceId: string;
   let charter: string;
+  let context: string;
   try {
     const { active } = await resolveActiveWorkspace(supabase, user.id);
     workspaceId = active.id;
     charter = (await getActiveCharter(supabase, active.id)).content;
+    context = buildWorkspaceContext(active);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Workspace introuvable.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  // 2) Génération IA (avec la charte du workspace)
+  // 2) Génération IA (avec la charte + le contexte du workspace)
   let posts;
   try {
-    posts = await generatePosts(facts, intervenants, charter);
+    posts = await generatePosts(facts, intervenants, charter, context);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Échec de la génération IA.";

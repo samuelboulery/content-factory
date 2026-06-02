@@ -9,6 +9,8 @@ create table if not exists workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   owner_id uuid not null references auth.users(id) on delete cascade,
+  context text, -- contexte général de l'asso/projet (injecté dans la génération)
+  networks text[] not null default '{}', -- réseaux ciblés (LinkedIn, Instagram…)
   created_at timestamptz not null default now()
 );
 

@@ -57,3 +57,13 @@ export async function resolveActiveWorkspace(
   const active = all.find((w) => w.id === activeId) ?? all[0];
   return { active, all };
 }
+
+/** Bloc contexte (contexte général + réseaux) injecté dans la génération. */
+export function buildWorkspaceContext(workspace: Workspace): string {
+  const parts: string[] = [];
+  if (workspace.context?.trim()) parts.push(workspace.context.trim());
+  if (workspace.networks.length > 0) {
+    parts.push(`Réseaux cibles : ${workspace.networks.join(", ")}`);
+  }
+  return parts.join("\n");
+}
