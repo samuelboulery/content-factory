@@ -70,6 +70,11 @@ enregistrement crée une nouvelle version (append-only) ; l'historique permet de
 restaurer une version antérieure. La génération utilise la charte active du workspace
 (la constante `TDS_CHARTER` sert de version 1 par défaut). Table `charter_versions`.
 
+**Révision des posts** : sur chaque carte, **Éditer** (modifier le contenu à la main)
+et **Régénérer** (relance DeepSeek avec une note optionnelle). La régénération reçoit
+toute la campagne en contexte — les posts déjà publiés sont marqués « ne pas
+contredire » pour garder la cohérence.
+
 **Config Supabase requise** (dashboard → Authentication → URL Configuration) :
 - **Site URL** : `http://localhost:3000` (en dev)
 - **Redirect URLs** : ajouter `http://localhost:3000/**`

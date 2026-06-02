@@ -97,12 +97,17 @@ export async function generatePosts(
   intervenants: string,
   charter: string,
 ): Promise<GeneratedPost[]> {
+  const prompt = buildPrompt(facts, intervenants, charter);
+  const raw = await callDeepSeek(prompt);
+  return parsePostsJson(raw);
+}
+
+/** Appel brut DeepSeek (mode JSON) → retourne le contenu texte du message. */
+async function callDeepSeek(prompt: string): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     throw new Error('DEEPSEEK_API_KEY manquante côté serveur (.env.local).');
   }
-
-  const prompt = buildPrompt(facts, intervenants, charter);
 
   let response: Response;
   try {
@@ -130,8 +135,7 @@ export async function generatePosts(
   }
 
   const data: unknown = await response.json();
-  const rawContent = extractMessageContent(data);
-  return parsePostsJson(rawContent);
+  return extractMessageContent(data);
 }
 
 /** Extrait le `message.content` de la réponse (forme OpenAI-compatible). */
@@ -202,5 +206,107 @@ function validatePost(post: unknown, index: number): GeneratedPost {
     scheduled_offset_days: offset,
     content,
     so_what: typeof soWhat === 'string' ? soWhat : '',
+  };
+}
+
+/** Un post de la campagne, fourni en contexte lors d'une régénération. */
+export type CampaignPost = {
+  dateLabel: string;
+  content: string;
+  status: 'publié' | 'à publier';
+  isTarget: boolean;
+};
+
+function buildRegenPrompt(args: {
+  charter: string;
+  facts: EventFacts;
+  campaign: CampaignPost[];
+  note: string;
+}): string {
+  const { charter, facts, campaign, note } = args;
+  const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
+  const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
+  const lien = facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]';
+
+  const campagne = campaign
+    .map((p, i) => {
+      const marque = p.isTarget ? ' ⟵ POST À RÉÉCRIRE' : '';
+      return `Post ${i + 1} — ${p.dateLabel} — [${p.status}]${marque}\n${p.content}`;
+    })
+    .join('\n\n---\n\n');
+
+  return `Tu es un rédacteur senior pour l'association The Design Society.
+
+<charte>
+${charter}
+</charte>
+
+<faits_durs>
+Nom : ${facts.eventName}
+Date : ${dateLong}
+Lieu : ${lieu}
+Lien d'inscription : ${lien}
+</faits_durs>
+
+<campagne>
+${campagne}
+</campagne>
+
+<consigne_utilisateur>
+${note.trim() ? note.trim() : '(aucune note — améliore simplement le post à réécrire)'}
+</consigne_utilisateur>
+
+<regles>
+Réécris UNIQUEMENT le post marqué « POST À RÉÉCRIRE ».
+Les posts marqués [publié] sont déjà sortis : ne les contredis pas, ne te répète pas, reste dans la continuité de ton et de faits annoncés.
+Applique la consigne utilisateur. Respecte strictement la charte. Entre 600 et 1200 caractères.
+Anti-hallucination : n'invente aucun fait pratique. Manque normal au stade → change d'angle. Manque anormal → "[À COMPLÉTER : x]".
+Applique le filtre "so what" (bénéfice concret pour le lecteur, en une phrase).
+</regles>
+
+<output_format>
+Réponds en JSON valide UNIQUEMENT, sans préambule ni backticks :
+{ "content": "...", "so_what": "..." }
+</output_format>`;
+}
+
+/** Régénère un seul post en tenant compte de toute la campagne + d'une note. */
+export async function regeneratePost(args: {
+  charter: string;
+  facts: EventFacts;
+  campaign: CampaignPost[];
+  note: string;
+}): Promise<{ content: string; so_what: string }> {
+  const prompt = buildRegenPrompt(args);
+  const raw = await callDeepSeek(prompt);
+  return parseSinglePost(raw);
+}
+
+function parseSinglePost(raw: string): { content: string; so_what: string } {
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Aucun objet JSON trouvé dans la réponse du LLM.');
+  }
+  cleaned = cleaned.slice(start, end + 1);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new Error('JSON invalide renvoyé par le LLM.');
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('Réponse LLM invalide (objet attendu).');
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.content !== 'string' || obj.content.trim() === '') {
+    throw new Error('content manquant dans la réponse du LLM.');
+  }
+  return {
+    content: obj.content,
+    so_what: typeof obj.so_what === 'string' ? obj.so_what : '',
   };
 }

@@ -62,7 +62,7 @@ Supabase : création projet, migrations et clés via MCP. Schéma = source de v�
 - **Ne jamais committer `.env.local`** ni aucune clé.
 - **Demander avant d'ajouter une dépendance** hors stack listée.
 - **Demander avant toute action destructive** (rm, reset --hard, DB reset).
-- Scope actuel : auth + multi-workspace + switcher + page settings + charte éditable versionnée. Pas encore d'édition/régénération de posts, ni visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
+- Scope actuel : auth + multi-workspace + switcher + settings + charte versionnée + régénération/édition de posts. Pas encore : verdict par post (US-5.9), historique de régénération (US-5.10), calendrier, visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
 
 ## Environment Variables
 
@@ -84,6 +84,7 @@ Solo (Sam, owner). Développement **par paliers validés un à un**. Source de v
 - **RLS activée** sur `workspaces`, `communications`, `posts` avec policies owner-scoped (`auth.uid()`). Chaque user ne voit que les données de ses workspaces. Le trou du skeleton est fermé.
 - Multi-workspace : création de workspaces nommés + switcher type Slack (sidebar dans le route group `src/app/(app)/layout.tsx`). Workspace actif stocké en cookie `cf_active_workspace` (`src/lib/workspace.ts` + server actions `workspace-actions.ts`). Bootstrap du workspace TDS au 1er login (callback). Les communications sont scopées au workspace actif.
 - Charte éditoriale **versionnée par workspace** (`charter_versions`, append-only, version la plus haute = active). Éditable dans `/settings` (`charter-versions.ts` + `charter-actions.ts`) ; rollback = ré-append. La génération utilise la charte active du workspace ; `TDS_CHARTER` (constante `charter.ts`) sert de seed v1 + fallback.
+- Régénération/édition de posts (`src/lib/post-actions.ts`, UI dans `PostCard`). `regeneratePost` (`llm.ts`) reçoit **toute la campagne** en contexte, les posts `published` marqués « ne pas contredire ». Appel DeepSeek factorisé dans `callDeepSeek`. Édition manuelle = update direct du contenu. Pas d'historique de versions de post (US-5.10, Should).
 
 ## graphify
 
