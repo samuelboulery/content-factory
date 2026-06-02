@@ -46,8 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/SubmitButton";
-
-const NETWORKS = ["LinkedIn", "Instagram", "Facebook", "Twitter/X"];
+import { NETWORKS } from "@/lib/networks";
 
 const IMPORT_ERRORS: Record<string, string> = {
   empty: "Fichier vide ou illisible — aucune charte importée.",

@@ -39,6 +39,7 @@ interface PostCardProps {
   previousVersions: PostRevision[];
   aiReview: PostReview | null;
   canWrite: boolean;
+  network: string;
 }
 
 // Couleur du badge conformité selon le score (Tailwind, pas d'inline style).
@@ -89,6 +90,7 @@ export function PostCard({
   previousVersions,
   aiReview,
   canWrite,
+  network,
 }: PostCardProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
     "idle",
@@ -111,7 +113,9 @@ export function PostCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-muted-foreground">{dateLabel}</CardTitle>
+        <CardTitle className="text-muted-foreground">
+          {dateLabel} · {network}
+        </CardTitle>
         <CardAction>
           <Badge className={complianceClasses(compliance.score)}>
             Conformité {compliance.score}%

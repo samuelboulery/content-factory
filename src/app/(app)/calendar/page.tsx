@@ -21,6 +21,7 @@ type CalendarPost = {
   communication_id: string;
   scheduled_date: string;
   status: string;
+  network: string;
 };
 
 const WEEKDAYS = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"];
@@ -61,7 +62,7 @@ export default async function CalendarPage({
   if (comIds.length > 0) {
     const { data: postData } = await supabase
       .from("posts")
-      .select("id, communication_id, scheduled_date, status")
+      .select("id, communication_id, scheduled_date, status, network")
       .in("communication_id", comIds)
       .gte("scheduled_date", format(monthStart, "yyyy-MM-dd"))
       .lte("scheduled_date", format(monthEnd, "yyyy-MM-dd"));
@@ -135,8 +136,9 @@ export default async function CalendarPage({
                         ? "bg-green-600/15 text-green-800"
                         : "bg-primary/10 hover:bg-primary/20",
                     )}
-                    title={comName.get(post.communication_id) ?? ""}
+                    title={`${post.network} — ${comName.get(post.communication_id) ?? ""}`}
                   >
+                    <span className="text-muted-foreground">{post.network}</span>{" "}
                     {comName.get(post.communication_id) ?? "?"}
                   </Link>
                 ))}

@@ -11,7 +11,7 @@ import { getNetworkCharter, mergeNetworkCharter } from "@/lib/network-charter";
 import { getWorkspaceRole } from "@/lib/members";
 import { type EventStep } from "@/lib/types";
 
-// La génération DeepSeek (4 posts) peut être longue : on relève la limite.
+// Génération multi-plateformes en parallèle : on relève la limite (cap Vercel Hobby = 60s).
 export const maxDuration = 60;
 
 type GenerateBody = {
@@ -20,7 +20,7 @@ type GenerateBody = {
   event_location?: unknown;
   event_link?: unknown;
   intervenants_text?: unknown;
-  network?: unknown;
+  networks?: unknown;
   template_id?: unknown;
 };
 
@@ -48,13 +48,11 @@ export async function POST(request: Request) {
   }
 
   const name = asTrimmedString(body.name);
-  const eventDate =
-    typeof body.event_date === "string" ? body.event_date : "";
+  const eventDate = typeof body.event_date === "string" ? body.event_date : "";
   const eventLocation = asTrimmedString(body.event_location);
   const eventLink = asTrimmedString(body.event_link);
   const intervenants = asTrimmedString(body.intervenants_text);
 
-  // Validation des faits durs requis (fail fast).
   if (!name) {
     return NextResponse.json(
       { error: "Le nom de l'événement est requis." },
@@ -75,12 +73,13 @@ export async function POST(request: Request) {
     eventLink: eventLink || undefined,
   };
 
-  // 1) Workspace actif (créé si absent) + charte active (+ overlay réseau) + contexte
+  // 1) Prépa : workspace + rôle + charte de base + contexte + étapes + plateformes ciblées.
   let workspaceId: string;
-  let charter: string;
+  let baseCharter: string;
   let context: string;
   let steps: EventStep[];
-  let network: string;
+  let selectedNetworks: string[];
+  let charterByNetwork: Map<string, string>;
   try {
     const { active } = await resolveActiveWorkspace(supabase, user.id);
     if (!active) {
@@ -98,18 +97,26 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
-    // Réseau cible : la valeur demandée si elle fait partie des réseaux du workspace, sinon le premier.
-    const networks = active.networks.length > 0 ? active.networks : ["LinkedIn"];
-    const requested = asTrimmedString(body.network);
-    network = networks.includes(requested) ? requested : networks[0];
-    const baseCharter = (await getActiveCharter(supabase, active.id)).content;
-    charter = mergeNetworkCharter(
-      baseCharter,
-      getNetworkCharter(active, network),
-      network,
+
+    // Plateformes ciblées : intersection avec les réseaux du workspace ; défaut = toutes.
+    const wsNetworks =
+      active.networks.length > 0 ? active.networks : ["LinkedIn"];
+    const requestedNetworks = Array.isArray(body.networks)
+      ? body.networks.filter((n): n is string => typeof n === "string")
+      : [];
+    selectedNetworks = requestedNetworks.filter((n) => wsNetworks.includes(n));
+    if (selectedNetworks.length === 0) selectedNetworks = wsNetworks;
+
+    baseCharter = (await getActiveCharter(supabase, active.id)).content;
+    // Charte fusionnée (base + overlay) par plateforme, pré-calculée.
+    charterByNetwork = new Map(
+      selectedNetworks.map((net) => [
+        net,
+        mergeNetworkCharter(baseCharter, getNetworkCharter(active, net), net),
+      ]),
     );
     context = buildWorkspaceContext(active);
-    // Template choisi (validé contre ceux du workspace), sinon le premier. US-3.4.
+
     const templates = await listTemplates(supabase, active.id);
     const requestedTemplate = asTrimmedString(body.template_id);
     const template =
@@ -118,7 +125,6 @@ export async function POST(request: Request) {
       ? await getTemplateSteps(supabase, template.id)
       : DEFAULT_EVENT_STEPS;
   } catch (err) {
-    // Log serveur détaillé, message générique au client (pas de fuite d'info).
     console.error("[generate] préparation workspace/charte:", err);
     return NextResponse.json(
       { error: "Préparation impossible. Réessaie." },
@@ -126,19 +132,36 @@ export async function POST(request: Request) {
     );
   }
 
-  // 2) Génération IA (charte + overlay réseau + contexte + rétroplanning du workspace)
-  let posts;
-  try {
-    posts = await generatePosts(facts, intervenants, charter, context, steps, network);
-  } catch (err) {
-    console.error("[generate] appel LLM:", err);
+  // 2) Génération IA EN PARALLÈLE sur chaque plateforme (best-effort par plateforme).
+  const genResults = await Promise.allSettled(
+    selectedNetworks.map(async (net) => {
+      const posts = await generatePosts(
+        facts,
+        intervenants,
+        charterByNetwork.get(net) ?? baseCharter,
+        context,
+        steps,
+        net,
+      );
+      return { network: net, posts };
+    }),
+  );
+  const ok = genResults.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  const failedNetworks = selectedNetworks.filter(
+    (_, i) => genResults[i].status === "rejected",
+  );
+  if (failedNetworks.length > 0) {
+    console.error("[generate] plateformes en échec:", failedNetworks);
+  }
+  if (ok.length === 0) {
     return NextResponse.json(
       { error: "La génération IA a échoué. Réessaie." },
       { status: 502 },
     );
   }
+  const generatedNetworks = ok.map((g) => g.network);
 
-  // 3) Insertion de la communication (scopée workspace)
+  // 3) Insertion de la communication (plateformes réellement générées).
   const { data: comm, error: commError } = await supabase
     .from("communications")
     .insert({
@@ -148,11 +171,11 @@ export async function POST(request: Request) {
       event_link: eventLink || null,
       intervenants_text: intervenants || null,
       workspace_id: workspaceId,
-      network,
+      networks: generatedNetworks,
+      network: generatedNetworks[0],
     })
     .select("id")
     .single();
-
   if (commError || !comm) {
     console.error("[generate] insert communication:", commError);
     return NextResponse.json(
@@ -161,58 +184,66 @@ export async function POST(request: Request) {
     );
   }
 
-  // 4) Calcul des dates réelles + anti-chevauchement (US-5.4) + insertion
+  // 4) Dates + anti-collision PAR plateforme (mêmes jours entre plateformes,
+  //    décalés au sein d'une même plateforme entre campagnes).
   const eventDateObj = parseISO(eventDate);
-
-  // Jours déjà occupés par d'autres posts du même workspace.
-  const occupied = new Set<string>();
+  const occupiedByNet = new Map<string, Set<string>>();
   const { data: wsCommIds } = await supabase
     .from("communications")
     .select("id")
     .eq("workspace_id", workspaceId);
-  const commIds = (wsCommIds ?? []).map((c) => c.id as string);
-  if (commIds.length > 0) {
+  const allCommIds = (wsCommIds ?? []).map((c) => c.id as string);
+  if (allCommIds.length > 0) {
     const { data: existingPosts } = await supabase
       .from("posts")
-      .select("scheduled_date")
-      .in("communication_id", commIds);
+      .select("network, scheduled_date")
+      .in("communication_id", allCommIds);
     for (const p of existingPosts ?? []) {
-      occupied.add(p.scheduled_date as string);
+      const net = p.network as string;
+      if (!occupiedByNet.has(net)) occupiedByNet.set(net, new Set());
+      occupiedByNet.get(net)!.add(p.scheduled_date as string);
     }
   }
-
-  // Assigne du plus tôt au plus tard : chaque post prend le jour libre le plus
-  // proche de sa date théorique, puis réserve ce jour pour les suivants.
-  const ordered = [...posts].sort(
-    (a, b) => a.scheduled_offset_days - b.scheduled_offset_days,
-  );
-  const rows = ordered.map((post) => {
-    const base = addDays(eventDateObj, post.scheduled_offset_days);
-    const scheduled_date = findFreeDate(base, occupied);
-    // Anti-collision best-effort (soft par design : la date reste éditable à la
-    // main). Fenêtre saturée → collision tolérée mais journalisée, pas silencieuse.
-    if (occupied.has(scheduled_date)) {
-      console.warn(
-        `[generate] collision de date tolérée (fenêtre saturée): ${scheduled_date}`,
-      );
+  const occ = (net: string): Set<string> => {
+    let set = occupiedByNet.get(net);
+    if (!set) {
+      set = new Set();
+      occupiedByNet.set(net, set);
     }
-    occupied.add(scheduled_date);
-    return {
-      communication_id: comm.id as string,
-      scheduled_date,
-      content: post.content,
-      so_what: post.so_what || null,
-      original_content: post.content, // brouillon IA figé (boucle d'apprentissage)
-    };
+    return set;
+  };
+
+  const rows = ok.flatMap((g) => {
+    const occSet = occ(g.network);
+    const ordered = [...g.posts].sort(
+      (a, b) => a.scheduled_offset_days - b.scheduled_offset_days,
+    );
+    return ordered.map((post) => {
+      const base = addDays(eventDateObj, post.scheduled_offset_days);
+      const scheduled_date = findFreeDate(base, occSet);
+      if (occSet.has(scheduled_date)) {
+        console.warn(
+          `[generate] collision de date tolérée (${g.network}): ${scheduled_date}`,
+        );
+      }
+      occSet.add(scheduled_date);
+      return {
+        communication_id: comm.id as string,
+        scheduled_date,
+        content: post.content,
+        so_what: post.so_what || null,
+        original_content: post.content,
+        network: g.network,
+      };
+    });
   });
 
   const { data: inserted, error: postsError } = await supabase
     .from("posts")
     .insert(rows)
-    .select("id, content");
+    .select("id, content, network");
   if (postsError || !inserted) {
     console.error("[generate] insert posts:", postsError);
-    // Rollback : éviter une communication orpheline si l'insertion des posts échoue.
     const { error: rollbackError } = await supabase
       .from("communications")
       .delete()
@@ -226,31 +257,41 @@ export async function POST(request: Request) {
     );
   }
 
-  // 5) Relecture IA best-effort (US-5.5) APRÈS insertion : un échec/timeout ne
-  // fait jamais perdre les posts. `reviews` est aligné par construction sur
-  // `insertedPosts` (reviewCampaign renvoie EXACTEMENT N verdicts, même ordre).
-  const insertedPosts = inserted as { id: string; content: string }[];
-  try {
-    const reviews = await reviewCampaign(
-      charter,
-      facts,
-      insertedPosts.map((p) => p.content),
-    );
-    const results = await Promise.all(
-      insertedPosts.map((p, i) =>
-        supabase
-          .from("posts")
-          .update({ ai_review: reviews[i] ?? null })
-          .eq("id", p.id),
-      ),
-    );
-    for (const r of results) {
-      if (r.error) console.error("[generate] update ai_review:", r.error);
-    }
-  } catch (err) {
-    // Relecture indisponible : les posts restent valides avec ai_review = null.
-    console.error("[generate] relecture IA (best-effort):", err);
+  // 5) Relecture IA best-effort APRÈS insertion, par plateforme (en parallèle).
+  const insertedPosts = inserted as {
+    id: string;
+    content: string;
+    network: string;
+  }[];
+  const byNet = new Map<string, typeof insertedPosts>();
+  for (const p of insertedPosts) {
+    if (!byNet.has(p.network)) byNet.set(p.network, []);
+    byNet.get(p.network)!.push(p);
   }
+  await Promise.all(
+    [...byNet.entries()].map(async ([net, ps]) => {
+      try {
+        const reviews = await reviewCampaign(
+          charterByNetwork.get(net) ?? baseCharter,
+          facts,
+          ps.map((p) => p.content),
+        );
+        const results = await Promise.all(
+          ps.map((p, i) =>
+            supabase
+              .from("posts")
+              .update({ ai_review: reviews[i] ?? null })
+              .eq("id", p.id),
+          ),
+        );
+        for (const r of results) {
+          if (r.error) console.error("[generate] update ai_review:", r.error);
+        }
+      } catch (err) {
+        console.error(`[generate] relecture IA ${net} (best-effort):`, err);
+      }
+    }),
+  );
 
   return NextResponse.json({ id: comm.id as string });
 }
