@@ -33,6 +33,7 @@ create table if not exists communications (
   intervenants_text text,
   workspace_id uuid references workspaces(id) on delete cascade,
   facts_updated_at timestamptz not null default now(), -- bumpé à chaque édition des faits durs
+  share_token uuid not null default gen_random_uuid(), -- lien public du form intervenants
   created_at timestamptz not null default now()
 );
 
@@ -90,3 +91,55 @@ create policy posts_owner_all on posts
     join workspaces w on w.id = c.workspace_id
     where w.owner_id = auth.uid()
   ));
+
+-- ── Form intervenants public à token (US-6.2) ───────────────────────────────
+create unique index if not exists communications_share_token_idx on communications(share_token);
+
+create table if not exists intervenant_submissions (
+  id uuid primary key default gen_random_uuid(),
+  communication_id uuid not null references communications(id) on delete cascade,
+  name text not null,
+  role text,
+  bio text,
+  message text,
+  created_at timestamptz not null default now()
+);
+create index if not exists intervenant_submissions_comm_idx on intervenant_submissions(communication_id);
+
+alter table intervenant_submissions enable row level security;
+drop policy if exists intervenant_submissions_owner_read on intervenant_submissions;
+create policy intervenant_submissions_owner_read on intervenant_submissions
+  for select
+  using (communication_id in (
+    select c.id from communications c
+    join workspaces w on w.id = c.workspace_id
+    where w.owner_id = auth.uid()
+  ));
+
+-- Fonctions security-definer accessibles à anon (le seul chemin public).
+create or replace function public.get_communication_public(p_token uuid)
+returns table (name text, event_date date)
+language sql security definer set search_path = public
+as $$
+  select c.name, c.event_date from public.communications c
+  where c.share_token = p_token limit 1;
+$$;
+revoke all on function public.get_communication_public(uuid) from public;
+grant execute on function public.get_communication_public(uuid) to anon, authenticated;
+
+create or replace function public.submit_intervenant(
+  p_token uuid, p_name text, p_role text, p_bio text, p_message text
+) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare v_comm_id uuid;
+begin
+  select c.id into v_comm_id from public.communications c where c.share_token = p_token limit 1;
+  if v_comm_id is null then raise exception 'Token invalide'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'Nom requis'; end if;
+  insert into public.intervenant_submissions (communication_id, name, role, bio, message)
+  values (v_comm_id, trim(p_name), nullif(trim(p_role), ''), nullif(trim(p_bio), ''), nullif(trim(p_message), ''));
+end;
+$$;
+revoke all on function public.submit_intervenant(uuid, text, text, text, text) from public;
+grant execute on function public.submit_intervenant(uuid, text, text, text, text) to anon, authenticated;

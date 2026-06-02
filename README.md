@@ -94,6 +94,12 @@ silencieuse). Régénérer le post le remet à jour.
 `/calendar` affiche un calendrier mensuel (navigable) de tous les posts planifiés du
 workspace ; les posts publiés ressortent en vert.
 
+**Form intervenants à token** : chaque com expose un lien public `/intervenants/[token]`
+(copiable depuis la page com). Les intervenants y déposent leur matière **sans compte** ;
+elle s'affiche sous « Matière reçue ». Sécurité : la route publique passe par deux
+fonctions Postgres `security-definer` (anon peut soumettre et lire le nom de l'event,
+mais **pas** lire les soumissions des autres). RLS reste verrouillée.
+
 **Config Supabase requise** (dashboard → Authentication → URL Configuration) :
 - **Site URL** : `http://localhost:3000` (en dev)
 - **Redirect URLs** : ajouter `http://localhost:3000/**`

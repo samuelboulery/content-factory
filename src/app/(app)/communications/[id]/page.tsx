@@ -3,10 +3,15 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/server";
-import { type Communication, type Post } from "@/lib/types";
+import {
+  type Communication,
+  type IntervenantSubmission,
+  type Post,
+} from "@/lib/types";
 import { checkCompliance } from "@/lib/compliance";
 import { editCommunicationAction } from "@/lib/communication-actions";
 import { PostCard } from "@/components/PostCard";
+import { CopyButton } from "@/components/CopyButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +43,13 @@ export default async function CommunicationPage({
     .eq("communication_id", id)
     .order("scheduled_date", { ascending: true });
   const posts = (postsData ?? []) as Post[];
+
+  const { data: subData } = await supabase
+    .from("intervenant_submissions")
+    .select("*")
+    .eq("communication_id", id)
+    .order("created_at", { ascending: true });
+  const submissions = (subData ?? []) as IntervenantSubmission[];
 
   const eventDateLabel = format(parseISO(comm.event_date), "d MMMM yyyy", {
     locale: fr,
@@ -75,6 +87,23 @@ export default async function CommunicationPage({
           </p>
         ) : null}
       </header>
+
+      <section className="mb-6 rounded-lg border p-4">
+        <h2 className="text-sm font-medium">
+          Lien à partager avec les intervenants
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ils déposent leur matière sans compte ; elle apparaît ci-dessous.
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <code className="truncate rounded bg-muted px-2 py-1 text-xs">
+            /intervenants/{comm.share_token}
+          </code>
+          <CopyButton value={`/intervenants/${comm.share_token}`}>
+            Copier le lien
+          </CopyButton>
+        </div>
+      </section>
 
       <details className="mb-6 rounded-lg border p-4">
         <summary className="cursor-pointer text-sm font-medium">
@@ -131,6 +160,32 @@ export default async function CommunicationPage({
           </p>
         </form>
       </details>
+
+      {submissions.length > 0 ? (
+        <section className="mb-6">
+          <h2 className="text-lg font-medium">
+            Matière reçue ({submissions.length})
+          </h2>
+          <ul className="mt-2 flex flex-col gap-2">
+            {submissions.map((submission) => (
+              <li key={submission.id} className="rounded-lg border p-3 text-sm">
+                <div className="font-medium">
+                  {submission.name}
+                  {submission.role ? ` · ${submission.role}` : ""}
+                </div>
+                {submission.bio ? (
+                  <p className="text-muted-foreground">{submission.bio}</p>
+                ) : null}
+                {submission.message ? (
+                  <p className="mt-1 whitespace-pre-wrap">
+                    {submission.message}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {regenError ? (
         <p className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">

@@ -19,7 +19,18 @@ export type Communication = {
   event_link: string | null;
   intervenants_text: string | null;
   workspace_id: string | null;
+  share_token: string;
   facts_updated_at: string;
+  created_at: string;
+};
+
+export type IntervenantSubmission = {
+  id: string;
+  communication_id: string;
+  name: string;
+  role: string | null;
+  bio: string | null;
+  message: string | null;
   created_at: string;
 };
 

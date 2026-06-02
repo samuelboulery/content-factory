@@ -62,7 +62,8 @@ Supabase : création projet, migrations et clés via MCP. Schéma = source de v�
 - **Ne jamais committer `.env.local`** ni aucune clé.
 - **Demander avant d'ajouter une dépendance** hors stack listée.
 - **Demander avant toute action destructive** (rm, reset --hard, DB reset).
-- Scope actuel : auth + multi-workspace + switcher + settings + charte versionnée + contexte général & réseaux par workspace (injectés dans la génération) + régénération/édition + statut publié (édition auto-détectée) + faits durs corrigeables avec flag de divergence + dashboard + calendrier mensuel. Pas encore : historique de régénération (US-5.10), form intervenants à token (US-6.2), import charte .skill (US-2.4), templates paramétrables (Epic 3), visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
+- Scope actuel : auth + multi-workspace + switcher + settings + charte versionnée + contexte/réseaux + génération chaînée + anti-hallucination + conformité + régénération/édition + statut publié (édition auto-détectée) + faits durs corrigeables + flag divergence + dashboard + calendrier + form intervenants public à token. Pas encore : historique de régénération (US-5.10), import charte .skill (US-2.4), templates paramétrables (Epic 3), visuels. Référence produit : `content-factory-prd.md` + `content-factory-backlog.md`.
+- **Form intervenants public** (`/intervenants/[token]`, hors auth via middleware) : la matière arrive sans compte. Sécurité = 2 fonctions Postgres **security-definer** (`get_communication_public`, `submit_intervenant`) accordées à `anon` ; RLS reste verrouillée (anon ne peut PAS lire `intervenant_submissions`). Token = `communications.share_token`. Lien copiable + soumissions affichées sur la page com.
 
 ## Environment Variables
 
