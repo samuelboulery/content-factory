@@ -116,10 +116,19 @@ alter table posts enable row level security;
 drop policy if exists workspace_members_read on workspace_members;
 create policy workspace_members_read on workspace_members
   for select using (public.workspace_role(workspace_id) is not null);
+-- Écriture owner : insert/update/delete séparés (pas de FOR ALL, qui doublonnerait
+-- la policy SELECT et alourdirait chaque lecture — cf. advisor multiple_permissive_policies).
 drop policy if exists workspace_members_owner_write on workspace_members;
-create policy workspace_members_owner_write on workspace_members
-  for all using (public.workspace_role(workspace_id) = 'owner')
+drop policy if exists workspace_members_owner_insert on workspace_members;
+create policy workspace_members_owner_insert on workspace_members
+  for insert with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists workspace_members_owner_update on workspace_members;
+create policy workspace_members_owner_update on workspace_members
+  for update using (public.workspace_role(workspace_id) = 'owner')
   with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists workspace_members_owner_delete on workspace_members;
+create policy workspace_members_owner_delete on workspace_members
+  for delete using (public.workspace_role(workspace_id) = 'owner');
 
 drop policy if exists workspaces_owner_all on workspaces;
 drop policy if exists workspaces_member_read on workspaces;
@@ -139,18 +148,32 @@ drop policy if exists charter_versions_member_read on charter_versions;
 create policy charter_versions_member_read on charter_versions
   for select using (public.workspace_role(workspace_id) is not null);
 drop policy if exists charter_versions_owner_write on charter_versions;
-create policy charter_versions_owner_write on charter_versions
-  for all using (public.workspace_role(workspace_id) = 'owner')
+drop policy if exists charter_versions_owner_insert on charter_versions;
+create policy charter_versions_owner_insert on charter_versions
+  for insert with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists charter_versions_owner_update on charter_versions;
+create policy charter_versions_owner_update on charter_versions
+  for update using (public.workspace_role(workspace_id) = 'owner')
   with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists charter_versions_owner_delete on charter_versions;
+create policy charter_versions_owner_delete on charter_versions
+  for delete using (public.workspace_role(workspace_id) = 'owner');
 
 drop policy if exists communications_owner_all on communications;
 drop policy if exists communications_member_read on communications;
 create policy communications_member_read on communications
   for select using (public.workspace_role(workspace_id) is not null);
 drop policy if exists communications_editor_write on communications;
-create policy communications_editor_write on communications
-  for all using (public.workspace_role(workspace_id) in ('owner','editor'))
+drop policy if exists communications_editor_insert on communications;
+create policy communications_editor_insert on communications
+  for insert with check (public.workspace_role(workspace_id) in ('owner','editor'));
+drop policy if exists communications_editor_update on communications;
+create policy communications_editor_update on communications
+  for update using (public.workspace_role(workspace_id) in ('owner','editor'))
   with check (public.workspace_role(workspace_id) in ('owner','editor'));
+drop policy if exists communications_editor_delete on communications;
+create policy communications_editor_delete on communications
+  for delete using (public.workspace_role(workspace_id) in ('owner','editor'));
 
 drop policy if exists posts_owner_all on posts;
 drop policy if exists posts_member_read on posts;
@@ -158,10 +181,19 @@ create policy posts_member_read on posts
   for select using (communication_id in (
     select id from public.communications where public.workspace_role(workspace_id) is not null));
 drop policy if exists posts_editor_write on posts;
-create policy posts_editor_write on posts
-  for all using (communication_id in (
+drop policy if exists posts_editor_insert on posts;
+create policy posts_editor_insert on posts
+  for insert with check (communication_id in (
+    select id from public.communications where public.workspace_role(workspace_id) in ('owner','editor')));
+drop policy if exists posts_editor_update on posts;
+create policy posts_editor_update on posts
+  for update using (communication_id in (
     select id from public.communications where public.workspace_role(workspace_id) in ('owner','editor')))
   with check (communication_id in (
+    select id from public.communications where public.workspace_role(workspace_id) in ('owner','editor')));
+drop policy if exists posts_editor_delete on posts;
+create policy posts_editor_delete on posts
+  for delete using (communication_id in (
     select id from public.communications where public.workspace_role(workspace_id) in ('owner','editor')));
 
 -- ── Form intervenants public à token (US-6.2) ───────────────────────────────
@@ -243,9 +275,16 @@ drop policy if exists templates_member_read on templates;
 create policy templates_member_read on templates
   for select using (public.workspace_role(workspace_id) is not null);
 drop policy if exists templates_owner_write on templates;
-create policy templates_owner_write on templates
-  for all using (public.workspace_role(workspace_id) = 'owner')
+drop policy if exists templates_owner_insert on templates;
+create policy templates_owner_insert on templates
+  for insert with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists templates_owner_update on templates;
+create policy templates_owner_update on templates
+  for update using (public.workspace_role(workspace_id) = 'owner')
   with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists templates_owner_delete on templates;
+create policy templates_owner_delete on templates
+  for delete using (public.workspace_role(workspace_id) = 'owner');
 
 -- Étapes d'un template (offset + intention + niveau d'info). workspace_id gardé pour la RLS.
 create table if not exists template_steps (
@@ -268,9 +307,16 @@ drop policy if exists template_steps_member_read on template_steps;
 create policy template_steps_member_read on template_steps
   for select using (public.workspace_role(workspace_id) is not null);
 drop policy if exists template_steps_owner_write on template_steps;
-create policy template_steps_owner_write on template_steps
-  for all using (public.workspace_role(workspace_id) = 'owner')
+drop policy if exists template_steps_owner_insert on template_steps;
+create policy template_steps_owner_insert on template_steps
+  for insert with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists template_steps_owner_update on template_steps;
+create policy template_steps_owner_update on template_steps
+  for update using (public.workspace_role(workspace_id) = 'owner')
   with check (public.workspace_role(workspace_id) = 'owner');
+drop policy if exists template_steps_owner_delete on template_steps;
+create policy template_steps_owner_delete on template_steps
+  for delete using (public.workspace_role(workspace_id) = 'owner');
 
 -- ── Invitations par lien-token (US-1.4b) ─────────────────────────────────────
 create table if not exists workspace_invites (
@@ -284,6 +330,9 @@ create table if not exists workspace_invites (
   accepted_at timestamptz
 );
 create index if not exists workspace_invites_workspace_idx on workspace_invites(workspace_id);
+-- Index sur les FK (advisor unindexed_foreign_keys) : lookups + cascades à la suppression d'un user.
+create index if not exists workspace_invites_created_by_idx on workspace_invites(created_by);
+create index if not exists workspace_invites_accepted_by_idx on workspace_invites(accepted_by);
 
 alter table workspace_invites enable row level security;
 drop policy if exists workspace_invites_owner_all on workspace_invites;

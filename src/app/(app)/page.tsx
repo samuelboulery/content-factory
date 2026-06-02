@@ -3,19 +3,12 @@ import { redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/server";
-import { resolveActiveWorkspace } from "@/lib/workspace";
-import { getWorkspaceRole } from "@/lib/members";
+import { getActiveContext } from "@/lib/session";
 import { type Communication } from "@/lib/types";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user, active, role } = await getActiveContext();
   if (!user) redirect("/login");
-
-  const { active } = await resolveActiveWorkspace(supabase, user.id);
 
   // Aucun workspace : onboarding (créer dans la sidebar ou rejoindre via invitation).
   if (!active) {
@@ -30,7 +23,6 @@ export default async function Home() {
     );
   }
 
-  const role = await getWorkspaceRole(supabase, active.id, user.id);
   const canCreate = role === "owner" || role === "editor";
 
   const { data } = await supabase

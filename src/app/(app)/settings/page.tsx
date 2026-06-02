@@ -2,8 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { createClient } from "@/lib/supabase/server";
-import { resolveActiveWorkspace } from "@/lib/workspace";
+import { getActiveContext } from "@/lib/session";
 import {
   getActiveCharter,
   listCharterVersions,
@@ -30,11 +29,7 @@ import {
 import { getTemplateSteps } from "@/lib/template-steps";
 import { listTemplates } from "@/lib/templates";
 import { TemplateStepsEditor } from "@/components/TemplateStepsEditor";
-import {
-  getWorkspaceRole,
-  listMembers,
-  listPendingInvites,
-} from "@/lib/members";
+import { listMembers, listPendingInvites } from "@/lib/members";
 import {
   createInviteAction,
   revokeInviteAction,
@@ -63,25 +58,24 @@ export default async function SettingsPage({
   }>;
 }) {
   const { imported, importError, learn } = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user, active, role } = await getActiveContext();
   if (!user) redirect("/login");
-
-  const { active } = await resolveActiveWorkspace(supabase, user.id);
   if (!active) redirect("/");
-  const charter = await getActiveCharter(supabase, active.id);
-  const versions = await listCharterVersions(supabase, active.id);
-  const templates = await listTemplates(supabase, active.id);
+  const isOwner = role === "owner";
+
+  // Lectures indépendantes en parallèle (le rôle vient déjà du contexte de session).
+  const [charter, versions, templates, members, invites, learning] =
+    await Promise.all([
+      getActiveCharter(supabase, active.id),
+      listCharterVersions(supabase, active.id),
+      listTemplates(supabase, active.id),
+      listMembers(supabase, active.id),
+      isOwner ? listPendingInvites(supabase, active.id) : Promise.resolve([]),
+      isOwner ? getLatestLearning(supabase, active.id) : Promise.resolve(null),
+    ]);
   const templateSteps = await Promise.all(
     templates.map((t) => getTemplateSteps(supabase, t.id)),
   );
-  const role = await getWorkspaceRole(supabase, active.id, user.id);
-  const isOwner = role === "owner";
-  const members = await listMembers(supabase, active.id);
-  const invites = isOwner ? await listPendingInvites(supabase, active.id) : [];
-  const learning = isOwner ? await getLatestLearning(supabase, active.id) : null;
 
   return (
     <main className="mx-auto max-w-3xl p-8">

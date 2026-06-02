@@ -40,32 +40,34 @@ export async function regeneratePostAction(formData: FormData) {
   const target = postData as Post | null;
   if (!target) redirect("/");
 
-  const { data: commData } = await supabase
-    .from("communications")
-    .select("*")
-    .eq("id", target.communication_id)
-    .maybeSingle();
+  // comm + siblings (même plateforme) ne dépendent que de `target` → en parallèle.
+  const [{ data: commData }, { data: siblingsData }] = await Promise.all([
+    supabase
+      .from("communications")
+      .select("*")
+      .eq("id", target.communication_id)
+      .maybeSingle(),
+    supabase
+      .from("posts")
+      .select("*")
+      .eq("communication_id", target.communication_id)
+      .eq("network", target.network)
+      .order("scheduled_date", { ascending: true }),
+  ]);
   const comm = commData as Communication | null;
   if (!comm) redirect("/");
-
-  // Contexte campagne = posts de la MÊME plateforme (multi-plateforme).
-  const { data: siblingsData } = await supabase
-    .from("posts")
-    .select("*")
-    .eq("communication_id", target.communication_id)
-    .eq("network", target.network)
-    .order("scheduled_date", { ascending: true });
   const siblings = (siblingsData ?? []) as Post[];
 
-  const baseCharter = (
-    await getActiveCharter(supabase, comm.workspace_id ?? "")
-  ).content;
-
-  const { data: wsData } = await supabase
-    .from("workspaces")
-    .select("*")
-    .eq("id", comm.workspace_id ?? "")
-    .maybeSingle();
+  // charte de base + workspace dépendent de comm.workspace_id → en parallèle.
+  const [baseCharterVersion, { data: wsData }] = await Promise.all([
+    getActiveCharter(supabase, comm.workspace_id ?? ""),
+    supabase
+      .from("workspaces")
+      .select("*")
+      .eq("id", comm.workspace_id ?? "")
+      .maybeSingle(),
+  ]);
+  const baseCharter = baseCharterVersion.content;
   const ws = wsData as Workspace | null;
   const context = ws ? buildWorkspaceContext(ws) : "";
   // Régénération = plateforme du POST → applique l'overlay de charte (US-2.5 / multi-plateforme).
