@@ -74,8 +74,14 @@ export async function regeneratePostAction(formData: FormData) {
     });
     await supabase
       .from("posts")
-      // Régénération = contenu IA frais → l'édition humaine est remise à zéro.
-      .update({ content, so_what: so_what || null, edited: false })
+      // Régénération = nouveau brouillon IA : repasse "à publier", flags remis à zéro.
+      .update({
+        content,
+        so_what: so_what || null,
+        edited: false,
+        status: "to_publish",
+        published_at: null,
+      })
       .eq("id", target.id);
   } catch {
     redirect(`/communications/${target.communication_id}?regenError=1`);
