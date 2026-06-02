@@ -2,9 +2,6 @@
 
 export type PostStatus = "to_publish" | "published";
 
-/** Verdict qualité (mesure du % publié sans édition). */
-export type PostVerdict = "as_is" | "edited" | "rejected";
-
 export type Workspace = {
   id: string;
   name: string;
@@ -30,7 +27,7 @@ export type Post = {
   content: string;
   so_what: string | null;
   status: PostStatus;
-  verdict: PostVerdict | null;
+  edited: boolean;
   created_at: string;
 };
 

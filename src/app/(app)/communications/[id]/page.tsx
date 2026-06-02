@@ -40,7 +40,9 @@ export default async function CommunicationPage({
 
   const total = posts.length;
   const publishedCount = posts.filter((p) => p.status === "published").length;
-  const asIsCount = posts.filter((p) => p.verdict === "as_is").length;
+  const asIsCount = posts.filter(
+    (p) => p.status === "published" && !p.edited,
+  ).length;
 
   return (
     <main className="mx-auto max-w-3xl p-8">
@@ -86,7 +88,7 @@ export default async function CommunicationPage({
               soWhat={post.so_what}
               compliance={checkCompliance(post.content)}
               status={post.status}
-              verdict={post.verdict}
+              edited={post.edited}
             />
           ))
         )}

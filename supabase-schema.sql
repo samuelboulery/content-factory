@@ -40,7 +40,7 @@ create table if not exists posts (
   content text not null,
   so_what text,
   status text not null default 'to_publish',
-  verdict text, -- null | 'as_is' | 'edited' | 'rejected' (mesure % publié sans édition)
+  edited boolean not null default false, -- édition humaine détectée (mesure % publié sans édition)
   created_at timestamptz not null default now()
 );
 

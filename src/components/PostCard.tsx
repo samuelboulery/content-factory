@@ -20,7 +20,7 @@ import {
   updatePostStateAction,
 } from "@/lib/post-actions";
 import type { ComplianceResult } from "@/lib/compliance";
-import type { PostStatus, PostVerdict } from "@/lib/types";
+import type { PostStatus } from "@/lib/types";
 
 interface PostCardProps {
   postId: string;
@@ -29,7 +29,7 @@ interface PostCardProps {
   soWhat: string | null;
   compliance: ComplianceResult;
   status: PostStatus;
-  verdict: PostVerdict | null;
+  edited: boolean;
 }
 
 // Couleur du badge conformité selon le score (Tailwind, pas d'inline style).
@@ -39,9 +39,9 @@ function complianceClasses(score: number): string {
   return "bg-red-600 text-white";
 }
 
-function statusLabel(status: PostStatus, verdict: PostVerdict | null): string {
+function statusLabel(status: PostStatus, edited: boolean): string {
   if (status === "published") {
-    return verdict === "edited" ? "Publié (édité)" : "Publié tel quel";
+    return edited ? "Publié (édité)" : "Publié tel quel";
   }
   return "À publier";
 }
@@ -74,7 +74,7 @@ export function PostCard({
   soWhat,
   compliance,
   status,
-  verdict,
+  edited,
 }: PostCardProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
     "idle",
@@ -92,7 +92,7 @@ export function PostCard({
     }
   }
 
-  const settled = status === "published";
+  const published = status === "published";
 
   return (
     <Card>
@@ -107,11 +107,9 @@ export function PostCard({
       <CardContent className="space-y-3">
         <Badge
           variant="secondary"
-          className={
-            status === "published" ? "bg-green-600 text-white" : undefined
-          }
+          className={published ? "bg-green-600 text-white" : undefined}
         >
-          {statusLabel(status, verdict)}
+          {statusLabel(status, edited)}
         </Badge>
         <p className="leading-relaxed whitespace-pre-wrap">{content}</p>
         {soWhat ? (
@@ -160,19 +158,14 @@ export function PostCard({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {settled ? (
-            <StateButton postId={postId} state="reset">
+          {published ? (
+            <StateButton postId={postId} state="unpublish">
               Remettre à publier
             </StateButton>
           ) : (
-            <>
-              <StateButton postId={postId} state="as_is">
-                Publié tel quel
-              </StateButton>
-              <StateButton postId={postId} state="edited">
-                Publié (édité)
-              </StateButton>
-            </>
+            <StateButton postId={postId} state="publish">
+              Marquer publié
+            </StateButton>
           )}
         </div>
 

@@ -74,7 +74,8 @@ export async function regeneratePostAction(formData: FormData) {
     });
     await supabase
       .from("posts")
-      .update({ content, so_what: so_what || null })
+      // Régénération = contenu IA frais → l'édition humaine est remise à zéro.
+      .update({ content, so_what: so_what || null, edited: false })
       .eq("id", target.id);
   } catch {
     redirect(`/communications/${target.communication_id}?regenError=1`);
@@ -103,11 +104,15 @@ export async function editPostAction(formData: FormData) {
   const post = postData as { communication_id: string } | null;
   if (!post) redirect("/");
 
-  await supabase.from("posts").update({ content }).eq("id", postId);
+  // Édition manuelle → marque le post comme édité (détection auto, US-5.9).
+  await supabase
+    .from("posts")
+    .update({ content, edited: true })
+    .eq("id", postId);
   redirect(`/communications/${post.communication_id}`);
 }
 
-/** Statut + verdict d'un post (US-8.2 publication, US-5.9 verdict qualité). */
+/** Publie / dé-publie un post (US-8.2). Le « édité » est détecté automatiquement. */
 export async function updatePostStateAction(formData: FormData) {
   const postId = String(formData.get("post_id") ?? "");
   const state = String(formData.get("state") ?? "");
@@ -118,16 +123,13 @@ export async function updatePostStateAction(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  let update: { status: string; verdict: string | null };
+  let update: { status: string };
   switch (state) {
-    case "as_is":
-      update = { status: "published", verdict: "as_is" };
+    case "publish":
+      update = { status: "published" };
       break;
-    case "edited":
-      update = { status: "published", verdict: "edited" };
-      break;
-    case "reset":
-      update = { status: "to_publish", verdict: null };
+    case "unpublish":
+      update = { status: "to_publish" };
       break;
     default:
       redirect("/");
