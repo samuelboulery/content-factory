@@ -30,6 +30,7 @@ create table if not exists communications (
   event_link text,
   intervenants_text text,
   workspace_id uuid references workspaces(id) on delete cascade,
+  facts_updated_at timestamptz not null default now(), -- bumpé à chaque édition des faits durs
   created_at timestamptz not null default now()
 );
 
@@ -41,6 +42,7 @@ create table if not exists posts (
   so_what text,
   status text not null default 'to_publish',
   edited boolean not null default false, -- édition humaine détectée (mesure % publié sans édition)
+  published_at timestamptz, -- horodatage de publication (pour le flag de divergence)
   created_at timestamptz not null default now()
 );
 

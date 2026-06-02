@@ -17,6 +17,7 @@ export type Communication = {
   event_link: string | null;
   intervenants_text: string | null;
   workspace_id: string | null;
+  facts_updated_at: string;
   created_at: string;
 };
 
@@ -28,6 +29,7 @@ export type Post = {
   so_what: string | null;
   status: PostStatus;
   edited: boolean;
+  published_at: string | null;
   created_at: string;
 };
 

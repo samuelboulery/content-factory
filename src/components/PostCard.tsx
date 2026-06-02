@@ -30,6 +30,7 @@ interface PostCardProps {
   compliance: ComplianceResult;
   status: PostStatus;
   edited: boolean;
+  diverged: boolean;
 }
 
 // Couleur du badge conformité selon le score (Tailwind, pas d'inline style).
@@ -75,6 +76,7 @@ export function PostCard({
   compliance,
   status,
   edited,
+  diverged,
 }: PostCardProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
     "idle",
@@ -105,6 +107,12 @@ export function PostCard({
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-3">
+        {diverged ? (
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+            ⚠️ Un fait dur a été modifié depuis la publication de ce post —
+            vérifie qu&apos;il est toujours exact.
+          </p>
+        ) : null}
         <Badge
           variant="secondary"
           className={published ? "bg-green-600 text-white" : undefined}

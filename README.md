@@ -81,6 +81,11 @@ tel quel » ; colonne `edited`). Régénérer remet le flag à zéro (contenu IA
 post publié active la clause « ne pas contredire » lors des régénérations suivantes.
 La page com affiche le ratio publiés / publiés sans édition (métrique pivot du MVP).
 
+**Faits durs corrigeables** : la fiche d'une com (nom, date, lieu, lien, intervenants)
+s'édite via « Éditer la fiche ». Si un fait change **après** qu'un post a été publié, ce
+post affiche ⚠️ « fait modifié depuis publication » (la divergence n'est jamais
+silencieuse). Régénérer le post le remet à jour.
+
 **Config Supabase requise** (dashboard → Authentication → URL Configuration) :
 - **Site URL** : `http://localhost:3000` (en dev)
 - **Redirect URLs** : ajouter `http://localhost:3000/**`

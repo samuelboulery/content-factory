@@ -123,13 +123,13 @@ export async function updatePostStateAction(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  let update: { status: string };
+  let update: { status: string; published_at: string | null };
   switch (state) {
     case "publish":
-      update = { status: "published" };
+      update = { status: "published", published_at: new Date().toISOString() };
       break;
     case "unpublish":
-      update = { status: "to_publish" };
+      update = { status: "to_publish", published_at: null };
       break;
     default:
       redirect("/");
