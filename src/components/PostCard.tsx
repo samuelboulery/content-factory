@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { format, parseISO } from "date-fns";
+import { fr } from "date-fns/locale";
 import {
   Card,
   CardAction,
@@ -17,20 +19,26 @@ import { SubmitButton } from "@/components/SubmitButton";
 import {
   editPostAction,
   regeneratePostAction,
+  rollbackPostAction,
+  updatePostDateAction,
   updatePostStateAction,
 } from "@/lib/post-actions";
 import type { ComplianceResult } from "@/lib/compliance";
-import type { PostStatus } from "@/lib/types";
+import type { PostReview, PostRevision, PostStatus } from "@/lib/types";
 
 interface PostCardProps {
   postId: string;
   content: string;
   dateLabel: string;
+  scheduledDate: string; // yyyy-MM-dd, pour l'édition de date
   soWhat: string | null;
   compliance: ComplianceResult;
   status: PostStatus;
   edited: boolean;
   diverged: boolean;
+  previousVersions: PostRevision[];
+  aiReview: PostReview | null;
+  canWrite: boolean;
 }
 
 // Couleur du badge conformité selon le score (Tailwind, pas d'inline style).
@@ -72,16 +80,20 @@ export function PostCard({
   postId,
   content,
   dateLabel,
+  scheduledDate,
   soWhat,
   compliance,
   status,
   edited,
   diverged,
+  previousVersions,
+  aiReview,
+  canWrite,
 }: PostCardProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
     "idle",
   );
-  const [mode, setMode] = useState<"none" | "edit" | "regen">("none");
+  const [mode, setMode] = useState<"none" | "edit" | "regen" | "date">("none");
 
   async function handleCopy() {
     try {
@@ -139,6 +151,27 @@ export function PostCard({
             ))}
           </ul>
         ) : null}
+        {aiReview ? (
+          <div className="space-y-1">
+            <Badge
+              variant="secondary"
+              className={
+                aiReview.conforme
+                  ? "bg-emerald-600 text-white"
+                  : "bg-amber-500 text-white"
+              }
+            >
+              {aiReview.conforme ? "Relu IA ✓ conforme" : "Relu IA ⚠ à vérifier"}
+            </Badge>
+            {aiReview.remarks.length > 0 ? (
+              <ul className="list-inside list-disc text-xs text-amber-700">
+                {aiReview.remarks.map((remark, idx) => (
+                  <li key={`${remark}-${idx}`}>{remark}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-3">
         <div className="flex flex-wrap gap-2">
@@ -149,33 +182,46 @@ export function PostCard({
                 ? "Échec copie"
                 : "Copier"}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMode(mode === "edit" ? "none" : "edit")}
-          >
-            Éditer
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMode(mode === "regen" ? "none" : "regen")}
-          >
-            Régénérer
-          </Button>
+          {canWrite ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMode(mode === "edit" ? "none" : "edit")}
+              >
+                Éditer
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMode(mode === "regen" ? "none" : "regen")}
+              >
+                Régénérer
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMode(mode === "date" ? "none" : "date")}
+              >
+                Date
+              </Button>
+            </>
+          ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {published ? (
-            <StateButton postId={postId} state="unpublish">
-              Remettre à publier
-            </StateButton>
-          ) : (
-            <StateButton postId={postId} state="publish">
-              Marquer publié
-            </StateButton>
-          )}
-        </div>
+        {canWrite ? (
+          <div className="flex flex-wrap gap-2">
+            {published ? (
+              <StateButton postId={postId} state="unpublish">
+                Remettre à publier
+              </StateButton>
+            ) : (
+              <StateButton postId={postId} state="publish">
+                Marquer publié
+              </StateButton>
+            )}
+          </div>
+        ) : null}
 
         {mode === "edit" ? (
           <form action={editPostAction} className="flex flex-col gap-2">
@@ -205,6 +251,57 @@ export function PostCard({
               Régénérer ce post
             </SubmitButton>
           </form>
+        ) : null}
+
+        {mode === "date" ? (
+          <form action={updatePostDateAction} className="flex items-end gap-2">
+            <input type="hidden" name="post_id" value={postId} />
+            <Input
+              type="date"
+              name="scheduled_date"
+              defaultValue={scheduledDate}
+              required
+              className="w-auto text-sm"
+            />
+            <SubmitButton pendingLabel="Enregistrement…">
+              Changer la date
+            </SubmitButton>
+          </form>
+        ) : null}
+
+        {previousVersions.length > 0 ? (
+          <details className="rounded-md border p-2">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              Historique des régénérations ({previousVersions.length})
+            </summary>
+            <ul className="mt-2 flex flex-col gap-2">
+              {previousVersions.map((version, idx) => (
+                <li
+                  key={`${version.regenerated_at}-${idx}`}
+                  className="rounded-md border p-2 text-xs"
+                >
+                  <div className="text-muted-foreground">
+                    {format(parseISO(version.regenerated_at), "d MMMM yyyy à HH:mm", {
+                      locale: fr,
+                    })}
+                    {version.note ? ` · « ${version.note} »` : ""}
+                  </div>
+                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
+                    {version.content}
+                  </p>
+                  {canWrite ? (
+                    <form action={rollbackPostAction} className="mt-2">
+                      <input type="hidden" name="post_id" value={postId} />
+                      <input type="hidden" name="version_index" value={idx} />
+                      <SubmitButton pendingLabel="Restauration…">
+                        Restaurer cette version
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : null}
       </CardFooter>
     </Card>

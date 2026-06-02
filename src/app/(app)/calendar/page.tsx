@@ -38,6 +38,7 @@ export default async function CalendarPage({
   if (!user) redirect("/login");
 
   const { active } = await resolveActiveWorkspace(supabase, user.id);
+  if (!active) redirect("/");
 
   const base =
     month && /^\d{4}-\d{2}$/.test(month) ? parseISO(`${month}-01`) : new Date();

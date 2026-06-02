@@ -5,6 +5,7 @@ import { fr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveWorkspace } from "@/lib/workspace";
+import { getWorkspaceRole } from "@/lib/members";
 import { type Communication } from "@/lib/types";
 
 export default async function Home() {
@@ -15,6 +16,22 @@ export default async function Home() {
   if (!user) redirect("/login");
 
   const { active } = await resolveActiveWorkspace(supabase, user.id);
+
+  // Aucun workspace : onboarding (créer dans la sidebar ou rejoindre via invitation).
+  if (!active) {
+    return (
+      <main className="mx-auto max-w-2xl p-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Bienvenue</h1>
+        <p className="mt-2 text-muted-foreground">
+          Tu n&apos;as pas encore de workspace. Crée-en un depuis la barre
+          latérale, ou rejoins-en un via un lien d&apos;invitation.
+        </p>
+      </main>
+    );
+  }
+
+  const role = await getWorkspaceRole(supabase, active.id, user.id);
+  const canCreate = role === "owner" || role === "editor";
 
   const { data } = await supabase
     .from("communications")
@@ -27,9 +44,11 @@ export default async function Home() {
     <main className="mx-auto max-w-2xl p-8">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">{active.name}</h1>
-        <Button asChild>
-          <Link href="/communications/new">Nouvelle communication</Link>
-        </Button>
+        {canCreate ? (
+          <Button asChild>
+            <Link href="/communications/new">Nouvelle communication</Link>
+          </Button>
+        ) : null}
       </div>
 
       {communications.length === 0 ? (

@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import type { EventStep } from './types';
+import type { EventStep, PostReview } from './types';
 
 /** Faits durs de l'événement (jamais inventés par l'IA). */
 export type EventFacts = {
@@ -41,6 +41,7 @@ function buildPrompt(
   charter: string,
   context: string,
   steps: EventStep[],
+  network: string,
 ): string {
   const { dateLong, lieu, lien, contexteBlock } = formatFactsBlock(facts, context);
   const matiere = intervenants?.trim() ? intervenants.trim() : '[NON FOURNI]';
@@ -86,7 +87,7 @@ Le niveau d'info attendu de chaque post est indiqué dans sa fiche d'intention c
 </regle_anti_hallucination_contextuelle>
 
 <mission>
-Génère ${count} posts LinkedIn en chaîne chronologique pour annoncer cet événement, en respectant strictement la charte.
+Génère ${count} posts ${network} en chaîne chronologique pour annoncer cet événement, en respectant strictement la charte.
 
 Les ${count} posts forment UNE campagne cohérente, pas des variations du même post. Chaque post connaît les précédents et prolonge le récit. Voici l'intention narrative et le niveau d'info attendu de chacun, dans l'ordre :
 
@@ -119,8 +120,9 @@ export async function generatePosts(
   charter: string,
   context: string,
   steps: EventStep[],
+  network: string,
 ): Promise<GeneratedPost[]> {
-  const prompt = buildPrompt(facts, intervenants, charter, context, steps);
+  const prompt = buildPrompt(facts, intervenants, charter, context, steps, network);
   const raw = await callDeepSeek(prompt);
   const parsed = parsePostsJson(raw, steps.length);
   // Les offsets viennent du template (déterministe), pas de la réponse du LLM.
@@ -132,7 +134,7 @@ export async function generatePosts(
 }
 
 /** Appel brut DeepSeek (mode JSON) → retourne le contenu texte du message. */
-async function callDeepSeek(prompt: string): Promise<string> {
+async function callDeepSeek(prompt: string, temperature = 0.7): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     throw new Error('DEEPSEEK_API_KEY manquante côté serveur (.env.local).');
@@ -150,7 +152,7 @@ async function callDeepSeek(prompt: string): Promise<string> {
         model: DEEPSEEK_MODEL,
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
-        temperature: 0.7,
+        temperature,
       }),
     });
   } catch (err) {
@@ -339,4 +341,255 @@ function parseSinglePost(raw: string): { content: string; so_what: string } {
     content: obj.content,
     so_what: typeof obj.so_what === 'string' ? obj.so_what : '',
   };
+}
+
+// ── Relecteur IA de conformité (US-5.5, flag seul : ne réécrit jamais) ────────
+
+function buildReviewPrompt(
+  charter: string,
+  facts: EventFacts,
+  contents: string[],
+): string {
+  const { dateLong, lieu, lien } = formatFactsBlock(facts, '');
+  const postsBlock = contents
+    .map((content, i) => `[${i + 1}]\n${content}`)
+    .join('\n\n---\n\n');
+
+  return `Tu es un relecteur éditorial senior pour l'association The Design Society.
+Tu vérifies la conformité de posts à la charte ci-dessous. Tu ne réécris RIEN : tu signales seulement les écarts.
+
+<charte>
+${charter}
+</charte>
+
+<faits_durs>
+Nom : ${facts.eventName}
+Date : ${dateLong}
+Lieu : ${lieu}
+Lien d'inscription : ${lien}
+</faits_durs>
+
+<criteres>
+Pour CHAQUE post, évalue sa conformité à la charte :
+- Ton TDS : « on » collectif (pas « nous »), sobriété, aucun superlatif creux ni jargon marketing.
+- Bénéfice lecteur clair (filtre « so what »).
+- Cohérence avec la ligne éditoriale et la charte.
+- Aucun fait pratique inventé (lieu / horaire / lien / intervenant non fourni dans les faits durs). Les mentions « [À COMPLÉTER : x] » sont normales (manque assumé), pas un écart.
+Un post est "conforme": true s'il ne présente aucun écart notable. Sinon liste les écarts dans "remarks" (phrases courtes, actionnables).
+</criteres>
+
+<posts>
+${postsBlock}
+</posts>
+
+<output_format>
+Réponds en JSON valide UNIQUEMENT, sans préambule ni backticks. Le tableau "reviews" doit contenir EXACTEMENT ${contents.length} entrées, dans l'ordre des posts :
+{ "reviews": [ { "conforme": true, "remarks": [] } ] }
+</output_format>`;
+}
+
+function parseReviewsJson(raw: string, expectedCount: number): PostReview[] {
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Aucun objet JSON trouvé dans la réponse du relecteur.');
+  }
+  cleaned = cleaned.slice(start, end + 1);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    throw new Error('JSON invalide renvoyé par le relecteur.');
+  }
+  if (typeof parsed !== 'object' || parsed === null || !('reviews' in parsed)) {
+    throw new Error('Champ "reviews" manquant dans la réponse du relecteur.');
+  }
+  const reviews = (parsed as { reviews: unknown }).reviews;
+  if (!Array.isArray(reviews) || reviews.length !== expectedCount) {
+    const got = Array.isArray(reviews) ? reviews.length : 'aucun';
+    throw new Error(`Le relecteur doit renvoyer exactement ${expectedCount} verdicts (reçu : ${got}).`);
+  }
+  return reviews.map(validateReview);
+}
+
+function validateReview(review: unknown): PostReview {
+  const obj =
+    typeof review === 'object' && review !== null
+      ? (review as Record<string, unknown>)
+      : {};
+  const remarks = Array.isArray(obj.remarks)
+    ? obj.remarks.filter((r): r is string => typeof r === 'string')
+    : [];
+  return { conforme: obj.conforme === true, remarks };
+}
+
+/**
+ * Relit une campagne (N posts) vs charte. Un seul appel, verdict par post.
+ * Température basse pour un jugement stable. Flag seul : ne modifie pas les posts.
+ */
+export async function reviewCampaign(
+  charter: string,
+  facts: EventFacts,
+  contents: string[],
+): Promise<PostReview[]> {
+  if (contents.length === 0) return [];
+  const prompt = buildReviewPrompt(charter, facts, contents);
+  const raw = await callDeepSeek(prompt, 0.2);
+  return parseReviewsJson(raw, contents.length);
+}
+
+/** Relit un seul post (régénération) vs charte. */
+export async function reviewSinglePost(
+  charter: string,
+  facts: EventFacts,
+  content: string,
+): Promise<PostReview> {
+  const [review] = await reviewCampaign(charter, facts, [content]);
+  return review;
+}
+
+// ── Questions suggérées aux intervenants (US-6.3) ────────────────────────────
+
+function buildQuestionsPrompt(
+  charter: string,
+  context: string,
+  facts: EventFacts,
+  intervenantsMatter: string,
+): string {
+  const { dateLong, lieu, contexteBlock } = formatFactsBlock(facts, context);
+  const matiere = intervenantsMatter.trim() || '[aucune matière pour l’instant]';
+
+  return `Tu prépares la communication d'un événement pour l'association The Design Society.
+Propose des questions courtes et concrètes à poser aux intervenants pour récolter la matière utile à la communication (leur angle, le bénéfice concret pour le public, une anecdote, ce qu'ils veulent transmettre).
+
+<charte>
+${charter}
+</charte>
+${contexteBlock}
+<faits_durs>
+Nom : ${facts.eventName}
+Date : ${dateLong}
+Lieu : ${lieu}
+</faits_durs>
+
+<matiere_actuelle>
+${matiere}
+</matiere_actuelle>
+
+<consignes>
+Propose 4 à 6 questions, dans le ton de la charte (sobre, « on » collectif).
+Évite les questions déjà couvertes par la matière actuelle. Questions ouvertes, faciles à répondre.
+</consignes>
+
+<output_format>
+Réponds en JSON valide UNIQUEMENT, sans préambule ni backticks :
+{ "questions": ["...", "..."] }
+</output_format>`;
+}
+
+// ── Boucle d'apprentissage charte (corpus de diffs IA → humain) ──────────────
+
+/** Une correction : brouillon IA vs version finalement publiée par l'humain. */
+export type CharterDiff = { ai: string; human: string };
+
+/**
+ * Analyse les corrections humaines pour repérer des patterns et proposer un
+ * addendum à la charte. Un seul appel LLM.
+ */
+export async function analyzeCharterLearnings(
+  charter: string,
+  diffs: CharterDiff[],
+): Promise<{ observations: string[]; addendum: string }> {
+  const corpus = diffs
+    .map(
+      (d, i) =>
+        `[${i + 1}]\nBROUILLON IA :\n${d.ai}\n\nPUBLIÉ (corrigé) :\n${d.human}`,
+    )
+    .join('\n\n---\n\n');
+
+  const prompt = `Tu es analyste éditorial pour l'association The Design Society.
+Voici la charte actuelle, puis des paires « brouillon IA → version publiée » : l'humain a corrigé chaque brouillon avant publication.
+Identifie les PATTERNS récurrents de ses corrections (ton, longueur, formulations ajoutées/retirées, tics évités) et propose un addendum concis à AJOUTER à la charte, dans son style, pour que l'IA produise directement ce que l'humain attend.
+
+<charte>
+${charter}
+</charte>
+
+<corrections>
+${corpus}
+</corrections>
+
+<consignes>
+Ne déduis que ce qui est RÉCURRENT (au moins 2 occurrences). N'invente pas de règle non observée.
+"observations" = liste courte de patterns observés. "addendum" = bloc à ajouter à la charte (quelques lignes max, ton de la charte).
+</consignes>
+
+<output_format>
+Réponds en JSON valide UNIQUEMENT, sans préambule ni backticks :
+{ "observations": ["..."], "addendum": "..." }
+</output_format>`;
+
+  const raw = await callDeepSeek(prompt, 0.4);
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Aucun objet JSON trouvé (apprentissage).');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    throw new Error('JSON invalide renvoyé par le LLM (apprentissage).');
+  }
+  const obj =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  const observations = Array.isArray(obj.observations)
+    ? obj.observations.filter((o): o is string => typeof o === 'string')
+    : [];
+  const addendum = typeof obj.addendum === 'string' ? obj.addendum.trim() : '';
+  return { observations, addendum };
+}
+
+/** Génère des questions à poser aux intervenants selon le contexte (US-6.3). */
+export async function suggestIntervenantQuestions(
+  charter: string,
+  context: string,
+  facts: EventFacts,
+  intervenantsMatter: string,
+): Promise<string[]> {
+  const prompt = buildQuestionsPrompt(charter, context, facts, intervenantsMatter);
+  const raw = await callDeepSeek(prompt, 0.5);
+
+  let cleaned = raw.trim();
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Aucun objet JSON trouvé dans la réponse (questions).');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    throw new Error('JSON invalide renvoyé par le LLM (questions).');
+  }
+  if (typeof parsed !== 'object' || parsed === null || !('questions' in parsed)) {
+    throw new Error('Champ "questions" manquant dans la réponse du LLM.');
+  }
+  const questions = (parsed as { questions: unknown }).questions;
+  if (!Array.isArray(questions)) {
+    throw new Error('Le LLM doit renvoyer un tableau "questions".');
+  }
+  // Garde au plus 6 questions non vides.
+  return questions
+    .filter((q): q is string => typeof q === 'string' && q.trim() !== '')
+    .map((q) => q.trim())
+    .slice(0, 6);
 }
