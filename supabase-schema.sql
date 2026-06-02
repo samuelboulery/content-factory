@@ -35,6 +35,7 @@ create table if not exists communications (
   intervenants_text text,
   workspace_id uuid not null references workspaces(id) on delete cascade,
   network text not null default 'LinkedIn', -- réseau cible de la génération (US-2.5)
+  suggested_questions text[] not null default '{}', -- questions IA pour les intervenants (US-6.3)
   facts_updated_at timestamptz not null default now(), -- bumpé à chaque édition des faits durs
   share_token uuid not null default gen_random_uuid(), -- lien public du form intervenants
   created_at timestamptz not null default now()
@@ -202,11 +203,18 @@ create or replace function public.submit_intervenant(
 ) returns void
 language plpgsql security definer set search_path = public
 as $$
-declare v_comm_id uuid;
+declare v_comm_id uuid; v_recent int; v_total int;
 begin
   select c.id into v_comm_id from public.communications c where c.share_token = p_token limit 1;
   if v_comm_id is null then raise exception 'Token invalide'; end if;
   if coalesce(trim(p_name), '') = '' then raise exception 'Nom requis'; end if;
+  -- Anti-spam : débit (max 5 / minute) + plafond global par communication.
+  select count(*) into v_recent from public.intervenant_submissions
+    where communication_id = v_comm_id and created_at > now() - interval '1 minute';
+  if v_recent >= 5 then raise exception 'Trop de soumissions, reessaie dans une minute'; end if;
+  select count(*) into v_total from public.intervenant_submissions
+    where communication_id = v_comm_id;
+  if v_total >= 200 then raise exception 'Limite de soumissions atteinte pour cette communication'; end if;
   insert into public.intervenant_submissions
     (communication_id, name, role, bio, message, subject, link)
   values (v_comm_id, trim(p_name),

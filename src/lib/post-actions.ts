@@ -114,7 +114,7 @@ export async function regeneratePostAction(formData: FormData) {
       note: note || null,
     };
     const history = [snapshot, ...(target.previous_versions ?? [])].slice(0, 3);
-    await supabase
+    const { error: updateError } = await supabase
       .from("posts")
       // Régénération = nouveau brouillon IA : repasse "à publier", flags remis à zéro.
       .update({
@@ -128,7 +128,9 @@ export async function regeneratePostAction(formData: FormData) {
         original_content: content, // nouveau brouillon IA figé (boucle d'apprentissage)
       })
       .eq("id", target.id);
-  } catch {
+    if (updateError) throw updateError; // surfacé via le catch (regenError)
+  } catch (err) {
+    console.error("[regeneratePost]:", err);
     redirect(`/communications/${target.communication_id}?regenError=1`);
   }
 
@@ -158,7 +160,7 @@ export async function rollbackPostAction(formData: FormData) {
   if (!version) redirect(`/communications/${target.communication_id}`);
 
   // Restaurer un ancien brouillon IA = repasse "à publier", flags remis à zéro (pas de re-snapshot).
-  await supabase
+  const { error } = await supabase
     .from("posts")
     .update({
       content: version.content,
@@ -168,6 +170,10 @@ export async function rollbackPostAction(formData: FormData) {
       published_at: null,
     })
     .eq("id", target.id);
+  if (error) {
+    console.error("[rollbackPost]:", error);
+    redirect(`/communications/${target.communication_id}?error=1`);
+  }
   redirect(`/communications/${target.communication_id}`);
 }
 
@@ -192,10 +198,14 @@ export async function editPostAction(formData: FormData) {
   if (!post) redirect("/");
 
   // Édition manuelle → marque le post comme édité (détection auto, US-5.9).
-  await supabase
+  const { error } = await supabase
     .from("posts")
     .update({ content, edited: true })
     .eq("id", postId);
+  if (error) {
+    console.error("[editPost]:", error);
+    redirect(`/communications/${post.communication_id}?error=1`);
+  }
   redirect(`/communications/${post.communication_id}`);
 }
 
@@ -223,10 +233,14 @@ export async function updatePostDateAction(formData: FormData) {
     redirect(`/communications/${post.communication_id}`);
   }
 
-  await supabase
+  const { error } = await supabase
     .from("posts")
     .update({ scheduled_date: scheduledDate })
     .eq("id", postId);
+  if (error) {
+    console.error("[updatePostDate]:", error);
+    redirect(`/communications/${post.communication_id}?error=1`);
+  }
   redirect(`/communications/${post.communication_id}`);
 }
 
@@ -261,6 +275,13 @@ export async function updatePostStateAction(formData: FormData) {
   const post = postData as { communication_id: string } | null;
   if (!post) redirect("/");
 
-  await supabase.from("posts").update(update).eq("id", postId);
+  const { error } = await supabase
+    .from("posts")
+    .update(update)
+    .eq("id", postId);
+  if (error) {
+    console.error("[updatePostState]:", error);
+    redirect(`/communications/${post.communication_id}?error=1`);
+  }
   redirect(`/communications/${post.communication_id}`);
 }
