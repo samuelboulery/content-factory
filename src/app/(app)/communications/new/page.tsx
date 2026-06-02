@@ -1,17 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { resolveActiveWorkspace } from "@/lib/workspace";
+import { getActiveContext } from "@/lib/session";
 import { listTemplates } from "@/lib/templates";
 import { NewCommunicationForm } from "@/components/NewCommunicationForm";
 
 export default async function NewCommunicationPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user, active } = await getActiveContext();
   if (!user) redirect("/login");
-
-  const { active } = await resolveActiveWorkspace(supabase, user.id);
   if (!active) redirect("/");
   const networks =
     active.networks.length > 0 ? active.networks : ["LinkedIn"];

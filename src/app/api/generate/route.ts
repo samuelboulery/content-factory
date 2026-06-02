@@ -30,10 +30,10 @@ function asTrimmedString(value: unknown): string {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // getClaims = vérif JWT locale (ES256), pas d'aller-retour réseau vers le serveur Auth.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) {
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
   }
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
   let selectedNetworks: string[];
   let charterByNetwork: Map<string, string>;
   try {
-    const { active } = await resolveActiveWorkspace(supabase, user.id);
+    const { active } = await resolveActiveWorkspace(supabase, userId);
     if (!active) {
       return NextResponse.json(
         { error: "Aucun workspace actif. Crée un workspace d'abord." },
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     }
     workspaceId = active.id;
     // Garde de rôle AVANT tout appel LLM coûteux : seuls owner/editor génèrent.
-    const role = await getWorkspaceRole(supabase, active.id, user.id);
+    const role = await getWorkspaceRole(supabase, active.id, userId);
     if (role !== "owner" && role !== "editor") {
       return NextResponse.json(
         { error: "Accès refusé : rôle insuffisant pour générer." },
