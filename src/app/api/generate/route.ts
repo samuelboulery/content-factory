@@ -133,10 +133,16 @@ export async function POST(request: Request) {
 
   const { error: postsError } = await supabase.from("posts").insert(rows);
   if (postsError) {
-    // Rollback : pas de communication orpheline si l'insertion des posts échoue.
-    await supabase.from("communications").delete().eq("id", comm.id as string);
+    // Rollback : éviter une communication orpheline si l'insertion des posts échoue.
+    const { error: rollbackError } = await supabase
+      .from("communications")
+      .delete()
+      .eq("id", comm.id as string);
+    const suffix = rollbackError
+      ? " (rollback de la communication échoué — ligne à nettoyer manuellement)"
+      : "";
     return NextResponse.json(
-      { error: `Erreur base de données (posts) : ${postsError.message}` },
+      { error: `Erreur base de données (posts) : ${postsError.message}${suffix}` },
       { status: 500 },
     );
   }

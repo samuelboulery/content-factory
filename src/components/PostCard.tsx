@@ -127,8 +127,8 @@ export function PostCard({
         ) : null}
         {compliance.violations.length > 0 ? (
           <ul className="list-inside list-disc text-xs text-red-600">
-            {compliance.violations.map((violation) => (
-              <li key={violation}>{violation}</li>
+            {compliance.violations.map((violation, idx) => (
+              <li key={`${violation}-${idx}`}>{violation}</li>
             ))}
           </ul>
         ) : null}

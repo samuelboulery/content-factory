@@ -10,8 +10,8 @@ export type EventFacts = {
   eventLink?: string;
 };
 
-/** Un post tel que renvoyé par le LLM (offset relatif à la date de l'event). */
-export type GeneratedPost = {
+/** Un post prêt à insérer (offset relatif à la date de l'event). Interne. */
+type GeneratedPost = {
   scheduled_offset_days: number;
   content: string;
   so_what: string;
@@ -20,6 +20,21 @@ export type GeneratedPost = {
 const DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_MODEL = 'deepseek-chat';
 
+/** Normalise les faits durs + le bloc contexte (partagé génération / régénération). */
+function formatFactsBlock(
+  facts: EventFacts,
+  context: string,
+): { dateLong: string; lieu: string; lien: string; contexteBlock: string } {
+  return {
+    dateLong: format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr }),
+    lieu: facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]',
+    lien: facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]',
+    contexteBlock: context.trim()
+      ? `\n<contexte_general>\n${context.trim()}\n</contexte_general>\n`
+      : '',
+  };
+}
+
 function buildPrompt(
   facts: EventFacts,
   intervenants: string,
@@ -27,13 +42,8 @@ function buildPrompt(
   context: string,
   steps: EventStep[],
 ): string {
-  const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
-  const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
-  const lien = facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]';
+  const { dateLong, lieu, lien, contexteBlock } = formatFactsBlock(facts, context);
   const matiere = intervenants?.trim() ? intervenants.trim() : '[NON FOURNI]';
-  const contexteBlock = context.trim()
-    ? `\n<contexte_general>\n${context.trim()}\n</contexte_general>\n`
-    : '';
   const count = steps.length;
   const missionSteps = steps
     .map(
@@ -245,12 +255,7 @@ function buildRegenPrompt(args: {
   note: string;
 }): string {
   const { charter, context, facts, campaign, note } = args;
-  const dateLong = format(parseISO(facts.eventDate), 'd MMMM yyyy', { locale: fr });
-  const lieu = facts.eventLocation?.trim() ? facts.eventLocation.trim() : '[NON FOURNI]';
-  const lien = facts.eventLink?.trim() ? facts.eventLink.trim() : '[NON FOURNI]';
-  const contexteBlock = context.trim()
-    ? `\n<contexte_general>\n${context.trim()}\n</contexte_general>\n`
-    : '';
+  const { dateLong, lieu, lien, contexteBlock } = formatFactsBlock(facts, context);
 
   const campagne = campaign
     .map((p, i) => {

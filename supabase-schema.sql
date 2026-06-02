@@ -31,7 +31,7 @@ create table if not exists communications (
   event_location text,
   event_link text,
   intervenants_text text,
-  workspace_id uuid references workspaces(id) on delete cascade,
+  workspace_id uuid not null references workspaces(id) on delete cascade,
   facts_updated_at timestamptz not null default now(), -- bumpé à chaque édition des faits durs
   share_token uuid not null default gen_random_uuid(), -- lien public du form intervenants
   created_at timestamptz not null default now()
@@ -53,6 +53,8 @@ create index if not exists workspaces_owner_id_idx on workspaces(owner_id);
 create index if not exists charter_versions_workspace_idx on charter_versions(workspace_id);
 create index if not exists communications_workspace_id_idx on communications(workspace_id);
 create index if not exists posts_communication_id_idx on posts(communication_id);
+create index if not exists posts_communication_status_idx on posts(communication_id, status);
+create index if not exists posts_published_at_idx on posts(published_at);
 
 -- RLS : chaque utilisateur ne voit que les données de ses workspaces.
 alter table workspaces enable row level security;
