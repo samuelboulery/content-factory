@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createHash, timingSafeEqual } from "crypto";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { collectDailyDigests } from "@/lib/daily-digest";
@@ -10,6 +11,13 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Erreur inattendue";
 }
 
+/** Comparaison à temps constant (hash → longueur fixe, pas de fuite par timing). */
+function safeEqual(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+
 /**
  * Cron quotidien (Vercel Cron) : envoie à chaque owner le digest des posts à
  * publier le jour même (US-8.3). Protégé par CRON_SECRET (Bearer).
@@ -17,7 +25,7 @@ function getErrorMessage(error: unknown): string {
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = request.headers.get("authorization");
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!secret || !auth || !safeEqual(auth, `Bearer ${secret}`)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

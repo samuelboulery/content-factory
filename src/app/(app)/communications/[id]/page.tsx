@@ -32,10 +32,14 @@ export default async function CommunicationPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ regenError?: string; qError?: string }>;
+  searchParams: Promise<{
+    regenError?: string;
+    qError?: string;
+    error?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { regenError, qError } = await searchParams;
+  const { regenError, qError, error } = await searchParams;
   const supabase = await createClient();
 
   // RLS scope automatiquement aux communications du workspace de l'utilisateur.
@@ -294,6 +298,11 @@ export default async function CommunicationPage({
         <p className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
           La régénération a échoué (erreur LLM). Le post n&apos;a pas été
           modifié. Réessaie.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          L&apos;action a échoué — rien n&apos;a été modifié. Réessaie.
         </p>
       ) : null}
 

@@ -8,6 +8,7 @@ import { listTemplates } from "@/lib/templates";
 import { generatePosts, reviewCampaign, type EventFacts } from "@/lib/llm";
 import { findFreeDate } from "@/lib/schedule";
 import { getNetworkCharter, mergeNetworkCharter } from "@/lib/network-charter";
+import { getWorkspaceRole } from "@/lib/members";
 import { type EventStep } from "@/lib/types";
 
 // La génération DeepSeek (4 posts) peut être longue : on relève la limite.
@@ -89,6 +90,14 @@ export async function POST(request: Request) {
       );
     }
     workspaceId = active.id;
+    // Garde de rôle AVANT tout appel LLM coûteux : seuls owner/editor génèrent.
+    const role = await getWorkspaceRole(supabase, active.id, user.id);
+    if (role !== "owner" && role !== "editor") {
+      return NextResponse.json(
+        { error: "Accès refusé : rôle insuffisant pour générer." },
+        { status: 403 },
+      );
+    }
     // Réseau cible : la valeur demandée si elle fait partie des réseaux du workspace, sinon le premier.
     const networks = active.networks.length > 0 ? active.networks : ["LinkedIn"];
     const requested = asTrimmedString(body.network);
@@ -109,9 +118,12 @@ export async function POST(request: Request) {
       ? await getTemplateSteps(supabase, template.id)
       : DEFAULT_EVENT_STEPS;
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Workspace introuvable.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Log serveur détaillé, message générique au client (pas de fuite d'info).
+    console.error("[generate] préparation workspace/charte:", err);
+    return NextResponse.json(
+      { error: "Préparation impossible. Réessaie." },
+      { status: 500 },
+    );
   }
 
   // 2) Génération IA (charte + overlay réseau + contexte + rétroplanning du workspace)
@@ -119,9 +131,11 @@ export async function POST(request: Request) {
   try {
     posts = await generatePosts(facts, intervenants, charter, context, steps, network);
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Échec de la génération IA.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error("[generate] appel LLM:", err);
+    return NextResponse.json(
+      { error: "La génération IA a échoué. Réessaie." },
+      { status: 502 },
+    );
   }
 
   // 3) Insertion de la communication (scopée workspace)
@@ -140,10 +154,9 @@ export async function POST(request: Request) {
     .single();
 
   if (commError || !comm) {
+    console.error("[generate] insert communication:", commError);
     return NextResponse.json(
-      {
-        error: `Erreur base de données (communication) : ${commError?.message ?? "inconnue"}`,
-      },
+      { error: "Enregistrement de la communication impossible." },
       { status: 500 },
     );
   }
@@ -191,22 +204,24 @@ export async function POST(request: Request) {
     .insert(rows)
     .select("id, content");
   if (postsError || !inserted) {
+    console.error("[generate] insert posts:", postsError);
     // Rollback : éviter une communication orpheline si l'insertion des posts échoue.
     const { error: rollbackError } = await supabase
       .from("communications")
       .delete()
       .eq("id", comm.id as string);
-    const suffix = rollbackError
-      ? " (rollback de la communication échoué — ligne à nettoyer manuellement)"
-      : "";
+    if (rollbackError) {
+      console.error("[generate] rollback communication échoué:", rollbackError);
+    }
     return NextResponse.json(
-      { error: `Erreur base de données (posts) : ${postsError?.message ?? "inconnue"}${suffix}` },
+      { error: "Enregistrement des posts impossible. Réessaie." },
       { status: 500 },
     );
   }
 
   // 5) Relecture IA best-effort (US-5.5) APRÈS insertion : un échec/timeout ne
-  // fait jamais perdre les posts. On enrichit ai_review par id (ordre-indépendant).
+  // fait jamais perdre les posts. `reviews` est aligné par construction sur
+  // `insertedPosts` (reviewCampaign renvoie EXACTEMENT N verdicts, même ordre).
   const insertedPosts = inserted as { id: string; content: string }[];
   try {
     const reviews = await reviewCampaign(
@@ -214,7 +229,7 @@ export async function POST(request: Request) {
       facts,
       insertedPosts.map((p) => p.content),
     );
-    await Promise.all(
+    const results = await Promise.all(
       insertedPosts.map((p, i) =>
         supabase
           .from("posts")
@@ -222,8 +237,12 @@ export async function POST(request: Request) {
           .eq("id", p.id),
       ),
     );
-  } catch {
+    for (const r of results) {
+      if (r.error) console.error("[generate] update ai_review:", r.error);
+    }
+  } catch (err) {
     // Relecture indisponible : les posts restent valides avec ai_review = null.
+    console.error("[generate] relecture IA (best-effort):", err);
   }
 
   return NextResponse.json({ id: comm.id as string });

@@ -27,7 +27,7 @@ export async function editCommunicationAction(formData: FormData) {
     redirect(`/communications/${id}`);
   }
 
-  await supabase
+  const { error } = await supabase
     .from("communications")
     .update({
       name,
@@ -38,6 +38,10 @@ export async function editCommunicationAction(formData: FormData) {
       facts_updated_at: new Date().toISOString(),
     })
     .eq("id", id);
+  if (error) {
+    console.error("[editCommunication]:", error);
+    redirect(`/communications/${id}?error=1`);
+  }
 
   redirect(`/communications/${id}`);
 }
