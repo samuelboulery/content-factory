@@ -126,9 +126,6 @@ export async function updatePostStateAction(formData: FormData) {
     case "edited":
       update = { status: "published", verdict: "edited" };
       break;
-    case "rejected":
-      update = { status: "to_publish", verdict: "rejected" };
-      break;
     case "reset":
       update = { status: "to_publish", verdict: null };
       break;

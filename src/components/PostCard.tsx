@@ -40,7 +40,6 @@ function complianceClasses(score: number): string {
 }
 
 function statusLabel(status: PostStatus, verdict: PostVerdict | null): string {
-  if (verdict === "rejected") return "Rejeté";
   if (status === "published") {
     return verdict === "edited" ? "Publié (édité)" : "Publié tel quel";
   }
@@ -93,7 +92,7 @@ export function PostCard({
     }
   }
 
-  const settled = status === "published" || verdict === "rejected";
+  const settled = status === "published";
 
   return (
     <Card>
@@ -107,7 +106,7 @@ export function PostCard({
       </CardHeader>
       <CardContent className="space-y-3">
         <Badge
-          variant={verdict === "rejected" ? "destructive" : "secondary"}
+          variant="secondary"
           className={
             status === "published" ? "bg-green-600 text-white" : undefined
           }
@@ -172,9 +171,6 @@ export function PostCard({
               </StateButton>
               <StateButton postId={postId} state="edited">
                 Publié (édité)
-              </StateButton>
-              <StateButton postId={postId} state="rejected">
-                Rejeter
               </StateButton>
             </>
           )}

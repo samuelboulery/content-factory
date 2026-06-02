@@ -75,10 +75,11 @@ et **Régénérer** (relance DeepSeek avec une note optionnelle). La régénéra
 toute la campagne en contexte — les posts déjà publiés sont marqués « ne pas
 contredire » pour garder la cohérence.
 
-**Publication & verdict** : chaque post se tranche en « Publié tel quel », « Publié
-(édité) » ou « Rejeté » (colonne `verdict`). Marquer un post publié active la clause
-« ne pas contredire » lors des régénérations suivantes. La page com affiche le ratio
-publiés / publiés sans édition (métrique pivot du MVP).
+**Publication & verdict** : chaque post se tranche en « Publié tel quel » ou « Publié
+(édité) » (colonne `verdict`) ; un post mauvais se corrige via Régénérer/Éditer.
+Marquer un post publié active la clause « ne pas contredire » lors des régénérations
+suivantes. La page com affiche le ratio publiés / publiés sans édition (métrique pivot
+du MVP).
 
 **Config Supabase requise** (dashboard → Authentication → URL Configuration) :
 - **Site URL** : `http://localhost:3000` (en dev)
